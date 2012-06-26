@@ -809,6 +809,10 @@ Firebug.ScriptPanel.prototype = Obj.extend(Firebug.SourceBoxPanel,
     {
         return Win.iterateBrowserWindows("navigator:browser", function(win)
         {
+            // Firebug doesn't have to be loaded in every browser window (see delayed load).
+            if (!win.Firebug.TabWatcher)
+                return false;
+
             return win.Firebug.TabWatcher.iterateContexts(function(context)
             {
                 if (context.stopped)
@@ -910,9 +914,9 @@ Firebug.ScriptPanel.prototype = Obj.extend(Firebug.SourceBoxPanel,
         Firebug.chrome.$("fbContinueButton").setAttribute("tooltiptext",
             Locale.$STRF("firebug.labelWithShortcut", [Locale.$STR("script.Continue"), "F8"]));
         Firebug.chrome.$("fbStepIntoButton").setAttribute("tooltiptext",
-            Locale.$STRF("firebug.labelWithShortcut", [Locale.$STR("script.Step_Into"), "F10"]));
+            Locale.$STRF("firebug.labelWithShortcut", [Locale.$STR("script.Step_Into"), "F11"]));
         Firebug.chrome.$("fbStepOverButton").setAttribute("tooltiptext",
-            Locale.$STRF("firebug.labelWithShortcut", [Locale.$STR("script.Step_Over"), "F11"]));
+            Locale.$STRF("firebug.labelWithShortcut", [Locale.$STR("script.Step_Over"), "F10"]));
         Firebug.chrome.$("fbStepOutButton").setAttribute("tooltiptext",
             Locale.$STRF("firebug.labelWithShortcut",
                 [Locale.$STR("script.Step_Out"), "Shift+F11"]));
