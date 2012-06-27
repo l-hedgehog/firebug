@@ -15,7 +15,9 @@ def merge_file(fn):
     lines = en_f.readlines()
     en_f.close()
     for line in lines:
-        if not line.strip() or line.startswith('#'):
+        if not line.strip():
+            continue
+        elif line.startswith('#'):
             cn_f.write(line)
         else:
             k, v = line.split('=', 1)
