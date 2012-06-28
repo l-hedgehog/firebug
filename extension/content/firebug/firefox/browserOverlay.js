@@ -1176,10 +1176,19 @@ if (checkFirebugVersion(PrefLoader.getPref("currentVersion")) > 0)
 
         if (PrefLoader.getPref("showFirstRunPage"))
         {
-            setTimeout(function() {
+            var timeout = setTimeout(function()
+            {
+                if (window.closed)
+                    return;
+
                 var version = Firebug.GlobalUI.getVersion();
                 Firebug.GlobalUI.visitWebsite("firstRunPage", version);
-            }, 100);
+            }, 1000);
+
+            window.addEventListener("unload", function()
+            {
+                clearTimeout(timeout);
+            }, false);
         }
     }
 }
@@ -1214,11 +1223,12 @@ if (typeof(nsContextMenu) != "undefined")
 // All Pages Activation" is on
 
 // Load Firebug by default if activation is on for all pages (see issue 5522)
-if (PrefLoader.getPref("allPagesActivation") == "on")
+if (PrefLoader.getPref("allPagesActivation") == "on" || !PrefLoader.getPref("delayLoad"))
 {
     Firebug.GlobalUI.startFirebug(function()
     {
-        FBTrace.sysout("Firebug loaded by default since allPagesActivation is on");
+        FBTrace.sysout("Firebug loaded by default since 'allPagesActivation' is on " +
+            "or 'delayLoad' is false");
     });
 }
 

@@ -71,7 +71,7 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
 
     // returns user-level wrapped object I guess.
     evaluate: function(expr, context, thisValue, targetWindow, successConsoleFunction,
-        exceptionFunction)
+        exceptionFunction, noStateChange)
     {
         if (!context)
             return;
@@ -97,7 +97,8 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
                     successConsoleFunction, exceptionFunction);
             }
 
-            context.invalidatePanels("dom", "html");
+            if (!noStateChange)
+                context.invalidatePanels("dom", "html");
         }
         catch (exc)
         {
@@ -1184,7 +1185,8 @@ function FirebugCommandLineAPI(context)
         return Firebug.Console.getDefaultReturnValue(context.window);
     };
 
-    this.memoryProfile = function(title)
+    // xxxHonza: removed from 1.10 (issue 5599)
+    /*this.memoryProfile = function(title)
     {
         Firebug.MemoryProfiler.start(context, title);
         return Firebug.Console.getDefaultReturnValue(context.window);
@@ -1194,7 +1196,7 @@ function FirebugCommandLineAPI(context)
     {
         Firebug.MemoryProfiler.stop(context);
         return Firebug.Console.getDefaultReturnValue(context.window);
-    };
+    };*/
 }
 
 // ********************************************************************************************* //
