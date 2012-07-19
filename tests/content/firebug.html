@@ -1,4 +1,4 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
     "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html>
 <head>
@@ -56,7 +56,8 @@ var testList = [
     {group: "firebug",            uri: "firebug/selectedPanelAfterReopen.js",     desc: "Selected panel should be still selected if Firebug UI is reopened.", testPage: "firebug/OpenFirebugOnThisPage.html"},
     {group: "firebug",            uri: "firebug/viralActivation.js",              desc: "Links from active pages should be active", testPage: "firebug/OpenFirebugOnThisPage.html" },
     {group: "firebug",            uri: "firebug/2613/issue2613.js",               desc: "HTML, CSS, and DOM panels do not display on reload.", testPage: "firebug/2613/issue2613.html" },
-    {group: "firebug",            uri: "firebug/4040/issue4040.js",               desc: "Switching to a about:blank page does not update the panels", testPage: "firebug/4040/issue4040.html" },
+    { group: "firebug",           uri: "firebug/4040/issue4040.js",               desc: "Switching to a about:blank page does not update the panels", testPage: "firebug/4040/issue4040.html" },
+    { group: "firebug",           uri: "firebug/4153/issue4153.js",               desc: "Re-attaching detached, deactivated Firebug UI doesn't close it", testPage: "firebug/4153/issue4153.html" },
     {group: "firebug",            uri: "firebug/4553/issue4553.js",               desc: "iframe should be content-primary", testPage: "firebug/4553/issue4553.html" },
     {group: "firebug",            uri: "firebug/5349/issue5349.js",               desc: "Context menu in select, radio, check, not work", testPage: "firebug/5349/issue5349.html" },
     {group: "firebug",            uri: "firebug/5526/issue5526.js",               desc: "Open Firebug in detached mode when it was minimized in detached mode", testPage: "firebug/5526/issue5526.html" },
@@ -78,6 +79,7 @@ var testList = [
     {group: "examples",           uri: "examples/exampleTest.js",                 desc: "Simple test example." },
     {group: "console",            uri: "console/breakOnError/breakOnError.js",    desc: "Test for breakOnError feature.", testPage: "console/breakOnError/breakOnError.html"},
     {group: "console",            uri: "console/consoleOnOtherPanels.js",         desc: "Console and command line on other panels.", testPage: "console/consoleOnOtherPanels.html"},
+    {group: "console",            uri: "console/executeSelection.js",             desc: "Execute selection in console.",              testPage: "console/executeSelection.html"},
     {group: "console",            uri: "console/onreadystatechange.js",           desc: "Log an onreadystatechange function." },
     {group: "console",            uri: "console/panelContentAfterDisable1.6.js",  desc: "If console panel is disabled command line must be hidden." },
     {group: "console",            uri: "console/panelContentAfterReopen.js",      desc: "Preserve Panel Content When Firebug UI Is Closed And Opened Again.", testPage: "console/panelContentAfterReopen.html"},
@@ -111,12 +113,15 @@ var testList = [
     {group: "console",            uri: "console/5033/issue5033.js",               desc: "Return value from a function executed on the command line is not displayed.", testPage: "console/5033/issue5033.html"},
     {group: "console",            uri: "console/5359/issue5359.js",               desc: "Use displayName in profiler", testPage: "console/5359/issue5359.html"},
     {group: "console",            uri: "console/5382/issue5382.js",               desc: "Console.log display bug with nested arrays", testPage: "console/5382/issue5382.html"},
+    {group: "console",            uri: "console/3663/issue3663.js",               desc: "too much recursion when logging array contains itself", testPage: "console/3663/issue3663.html"},
+    {group: "console",            uri: "console/5655/issue5655.js",               desc: "console panel width empty elements", testPage: "console/5655/issue5655.html"},
     {group: "console/spy",        uri: "console/spy/2285/issue2285.js",           desc: "support for content-type: multipart/x-mixed-replace", testPage: "console/spy/2285/issue2285.html" },
     {group: "console/spy",        uri: "console/spy/2462/issue2462.js",           desc: "The firebug console still shows the xhr in progress if you abort it (via request.abort()) ", testPage: "console/spy/2462/issue2462.html" },
     {group: "console/spy",        uri: "console/spy/2712/issue2712.js",           desc: "Gmail has network connections that report 200 Aborted", testPage: "console/spy/2712/issue2712.html" },
     {group: "console/spy",        uri: "console/spy/2868/issue2868.js",           desc: "ajax response is not shown in the answer tab", testPage: "console/spy/2868/issue2868.html" },
     {group: "console/spy",        uri: "console/spy/4085/issue4085.js",           desc: "Errors inside an XmlHttpRequest.onReadyStateChange still fail silently", testPage: "console/spy/4085/issue4085.html" },
     {group: "console/spy",        uri: "console/spy/4738/issue4738.js",           desc: "Open in new tab opens wrong url when reusing XMLHttpRequest objects", testPage: "console/spy/4738/issue4738.html" },
+    {group: "console/spy",        uri: "console/spy/4171/issue4171.js",           desc: "Expanding an XMLHttpRequest in Console tab before it ends makes JSON tab disappear", testPage: "console/spy/4171/issue4171.html" },
     {group: "console/api",        uri: "console/api/assert.js",                   desc: "Test for console.assert API.", testPage: "console/api/assert.html" },
     {group: "console/api",        uri: "console/api/clear.js",                    desc: "Test for console.clear API.", testPage: "console/api/clear.html" },
     {group: "console/api",        uri: "console/api/count.js",                    desc: "Test for console.count API.", testPage: "console/api/count.html" },
@@ -149,6 +154,7 @@ var testList = [
     {group: "commandLine",        uri: "commandLine/monitorEvents.js",            desc: "Verify command line monitorEvents API.", testPage: "commandLine/monitorEvents.html" },
     {group: "commandLine",        uri: "commandLine/objects.js",                  desc: "Page objects used on the command line", testPage: "commandLine/objects.html"},
     {group: "commandLine",        uri: "commandLine/profile.js",                  desc: "Verify command line profile & profileEnd API.", testPage: "commandLine/profile.html" },
+    {group: "commandLine",        uri: "commandLine/help.js",                     desc: "Verify command line help API", testPage: "commandLine/help.html"},
     {group: "commandLine",        uri: "commandLine/2934/issue2934.js",           desc: "1.6a7 console and auto-complete (needs 'window.' prefix)", testPage: "commandLine/2934/issue2934.html" },
     {group: "commandLine",        uri: "commandLine/3363/issue3363.js",           desc: "Issue 3363: groupCollapsed gets confused", testPage: "commandLine/3363/issue3363.html" },
     {group: "commandLine",        uri: "commandLine/3599/issue3599.js",           desc: "Issue 3599: The value of undefined no longer show in the console", testPage: "commandLine/3599/issue3599.html"},
@@ -301,6 +307,8 @@ var testList = [
     {group: "net",                uri: "net/4905/issue4905.js",                   desc: "Show the \"Connection\" header in the network/headers part", testPage: "net/4905/issue4905.html" },
     {group: "net",                uri: "net/5004/issue5004.js",                   desc: "Only raw http post request parameters view", testPage: "net/5004/issue5004.html" },
     {group: "net",                uri: "net/5007/issue5007.js",                   desc: "Headers from POST request body are not displayed anymore", testPage: "net/5007/issue5007.html" },
+    {group: "net",                uri: "net/5592/issue5592.js",                   desc: "Add option to copy request parameters", testPage: "net/5592/issue5592.html" },
+    {group: "net",                uri: "net/5714/issue5714.js",                   desc: "Can't resend requests", testPage: "net/5714/issue5714.html" },
     {group: "cookies",            uri: "cookies/general/cookiesPanel.js",         desc: "Existence of cookie panel", testPage: "cookies/general/cookiesPanel.html" },
     {group: "cookies",            uri: "cookies/general/cookieInfo.js",           desc: "Existence of cookie info", testPage: "cookies/general/cookieInfo.php" },
     {group: "cookies",            uri: "cookies/general/clipboard.js",            desc: "Clipboard functionality for the Cookies panel (copy and paste)", testPage: "cookies/general/clipboard.php" },

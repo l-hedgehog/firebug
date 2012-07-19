@@ -188,7 +188,7 @@ NetPanel.prototype = Obj.extend(Firebug.ActivablePanel,
         this.showToolbarButtons("fbNetButtons", enabled);
 
         if (enabled)
-            Firebug.chrome.setGlobalAttribute("cmd_togglePersistNet", "checked", this.persistContent);
+            Firebug.chrome.setGlobalAttribute("cmd_firebug_togglePersistNet", "checked", this.persistContent);
         else
             this.table = null;
 
@@ -327,6 +327,7 @@ NetPanel.prototype = Obj.extend(Firebug.ActivablePanel,
 
         var object = Firebug.getObjectByURL(this.context, file.href);
         var isPost = NetUtils.isURLEncodedRequest(file, this.context);
+        var params = Url.parseURLParams(file.href);
 
         items.push(
             {
@@ -336,6 +337,18 @@ NetPanel.prototype = Obj.extend(Firebug.ActivablePanel,
             }
         );
 
+        if (params.length > 0)
+        {
+            items.push(
+                {
+                    id: "fbCopyUrlParameters",
+                    label: "CopyURLParameters",
+                    tooltiptext: "net.tip.Copy_URL_Parameters",
+                    command: Obj.bindFixed(this.copyURLParams, this, file)
+                }
+            );
+        }
+
         if (isPost)
         {
             items.push(
@@ -343,6 +356,12 @@ NetPanel.prototype = Obj.extend(Firebug.ActivablePanel,
                     label: "CopyLocationParameters",
                     tooltiptext: "net.tip.Copy_Location_Parameters",
                     command: Obj.bindFixed(this.copyParams, this, file)
+                },
+                {
+                    id: "fbCopyPOSTParameters",
+                    label: "CopyPOSTParameters",
+                    tooltiptext: "net.tip.Copy_POST_Parameters",
+                    command: Obj.bindFixed(this.copyPOSTParams, this, file)
                 }
             );
         }
@@ -453,7 +472,31 @@ NetPanel.prototype = Obj.extend(Firebug.ActivablePanel,
         return items;
     },
 
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
     // Context menu commands
+
+    copyURLParams: function(file)
+    {
+        var params = Url.parseURLParams(file.href);
+        var result = params.map(function(o) { return o.name + "=" + o.value; });
+        System.copyToClipboard(result.join(Str.lineBreak()));
+    },
+
+    copyPOSTParams: function(file)
+    {
+        if (!NetUtils.isURLEncodedRequest(file, this.context))
+            return;
+
+        var text = NetUtils.getPostText(file, this.context, true);
+        if (text)
+        {
+            var lines = text.split("\n");
+            var params = Url.parseURLEncodedText(lines[lines.length-1]);
+            var result = params.map(function(o) { return o.name + "=" + o.value; });
+            System.copyToClipboard(result.join(Str.lineBreak()));
+        }
+    },
+
     copyParams: function(file)
     {
         var text = NetUtils.getPostText(file, this.context, true);

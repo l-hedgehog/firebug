@@ -28,6 +28,7 @@ pref("extensions.firebug.showBreakNotification", true);
 pref("extensions.firebug.stringCropLength", 50);
 pref("extensions.firebug.hideDefaultInspector", false);
 pref("extensions.firebug.delayLoad", true);
+pref("extensions.firebug.enableOrion", true);
 
 // Command line
 pref("extensions.firebug.commandEditor", false);
@@ -62,7 +63,7 @@ pref("extensions.firebug.preferJSDSourceLinks", false);
 // HTML
 pref("extensions.firebug.showCommentNodes", false);
 pref("extensions.firebug.showTextNodesWithWhitespace", false);
-pref("extensions.firebug.entityDisplay", "names");
+pref("extensions.firebug.entityDisplay", "symbols");
 pref("extensions.firebug.showFullTextNodes", true);
 pref("extensions.firebug.highlightMutations", true);
 pref("extensions.firebug.expandMutations", false);
@@ -120,7 +121,7 @@ pref("extensions.firebug.netPhaseInterval", 1000);
 pref("extensions.firebug.sizePrecision", 1);
 pref("extensions.firebug.netParamNameLimit", 25);
 pref("extensions.firebug.netShowPaintEvents", false);
-pref("extensions.firebug.netShowBFCacheResponses", true);
+pref("extensions.firebug.netShowBFCacheResponses", false);
 pref("extensions.firebug.netHtmlPreviewHeight", 100);
 
 // JSON Preview

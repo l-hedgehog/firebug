@@ -5,7 +5,7 @@
 
   <Description about="urn:mozilla:install-manifest">
     <em:id>firebug@software.joehewitt.com</em:id>
-    <em:version>1.10.0b1</em:version>
+    <em:version>1.11.0a0</em:version>
     <em:type>2</em:type>
     <em:bootstrap>true</em:bootstrap>
 
@@ -46,6 +46,15 @@
     <em:contributor>Sebastian Zartner</em:contributor>
     <em:contributor>Harutyun Amirjanyan</em:contributor>
     <em:contributor>Simon Lindholm</em:contributor>
+    <em:contributor>Stampolidis Anastasios</em:contributor>
+    <em:contributor>Joe Walker (Mozilla Corp.)</em:contributor>
+    <em:contributor>Vladimir Zhuravlev</em:contributor>
+    <em:contributor>Farshid Beheshti</em:contributor>
+    <em:contributor>Leon Sorokin</em:contributor>
+    <em:contributor>Florent Fayolle</em:contributor>
+    <em:contributor>Hector Zhao</em:contributor>
+    <em:contributor>Bharath Thiruveedula</em:contributor>
+    <em:contributor>Nathan Mische</em:contributor>
 
     <em:iconURL>chrome://firebug/skin/firebug64.png</em:iconURL>
     <em:homepageURL>http://www.getfirebug.com/</em:homepageURL>

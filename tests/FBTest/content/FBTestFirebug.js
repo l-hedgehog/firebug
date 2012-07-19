@@ -935,7 +935,7 @@ this.enableConsolePanel = function(callback)
  */
 this.disableAllPanels = function()
 {
-    FW.FBL.$("cmd_disablePanels").doCommand();
+    FW.FBL.$("cmd_firebug_disablePanels").doCommand();
 };
 
 /**
@@ -943,7 +943,7 @@ this.disableAllPanels = function()
  */
 this.enableAllPanels = function()
 {
-    FW.FBL.$("cmd_enablePanels").doCommand();
+    FW.FBL.$("cmd_firebug_enablePanels").doCommand();
 };
 
 /**
@@ -1138,6 +1138,19 @@ this.getPref = function(pref)
 // ********************************************************************************************* //
 // Command Line
 
+function getCommandLine(useCommandEditor)
+{
+    return useCommandEditor ?
+        FW.Firebug.CommandEditor :
+        FW.Firebug.CommandLine.getSingleRowCommandLine();
+}
+
+/**
+ * executes an expression inside the Command Line
+ * @param {String} the command to execute
+ * @param {Object} the Firebug.chrome object
+ * @param {Boolean} if set to true, type in the CommandEditor, or in the CommandLine otherwise
+ */
 this.executeCommand = function(expr, chrome, useCommandEditor)
 {
     this.clearAndTypeCommand(expr, useCommandEditor);
@@ -1148,39 +1161,51 @@ this.executeCommand = function(expr, chrome, useCommandEditor)
         FBTest.sendKey("RETURN", "fbCommandLine");
 };
 
-this.clearCommand = function(useCommandEditor)
+/**
+ * clears the Command Line or the Command Editor
+ */
+this.clearCommand = function()
 {
-    var doc = FW.Firebug.chrome.window.document;
-    var cmdLine = doc.getElementById(useCommandEditor ? "fbCommandEditor": "fbCommandLine");
-    cmdLine.value = "";
+    FW.Firebug.CommandLine.clear(FW.Firebug.currentContext);
 };
 
+
+/**
+ * clears and types a command into the Command Line or the Command Editor 
+ * @param {String} the command to type
+ * @param {Boolean} if set to true, type in the CommandEditor, or in the CommandLine otherwise
+ * 
+ */
 this.clearAndTypeCommand = function(string, useCommandEditor)
 {
-    FBTest.clearCommand(useCommandEditor);
+    FBTest.clearCommand();
     FBTest.typeCommand(string, useCommandEditor);
 };
 
+/**
+ * types a command into the Command Line or the Command Editor 
+ * @param {String} the command to type
+ * @param {Boolean} if set to true, type in the CommandEditor, or in the CommandLine otherwise
+ * 
+ */
 this.typeCommand = function(string, useCommandEditor)
 {
     var doc = FW.Firebug.chrome.window.document;
-    var cmdLine = doc.getElementById(useCommandEditor ? "fbCommandEditor": "fbCommandLine");
     var panelBar1 = doc.getElementById("fbPanelBar1");
+    var cmdLine = getCommandLine(useCommandEditor);
     var win = panelBar1.browser.contentWindow;
 
-    if (useCommandEditor)
-        FBTest.setPref("largeCommandLine", useCommandEditor);
+    FBTest.setPref("commandEditor", (useCommandEditor == true));
 
     FW.Firebug.chrome.window.focus();
     panelBar1.browser.contentWindow.focus();
-    FBTest.focus(cmdLine);
+    cmdLine.focus();
 
     FBTest.sysout("typing "+string+" in to "+cmdLine+" focused on "+
         FW.FBL.getElementCSSSelector(doc.commandDispatcher.focusedElement)+
         " win "+panelBar1.browser.contentWindow);
 
-    for (var i=0; i<string.length; ++i)
-        FBTest.synthesizeKey(string.charAt(i), null, win);
+    this.sendString(string, doc.commandDispatcher.focusedElement);
 };
 
 /**
@@ -1210,6 +1235,16 @@ this.executeCommandAndVerify = function(callback, expression, expected, tagName,
     FBTest.progress("Execute expression: " + expression);
     FBTest.executeCommand(expression);
 };
+
+/**
+ * Simulate selection in the Command Editor or the Command Line
+ * @param {Integer} the index of the start of the selection
+ * @param {Integer} the index of the end of the selection
+ */
+/*this.setCommandSelectionRange = function(selectionStart, selectionEnd)
+{
+    FW.Firebug.CommandLine.getCommandLine().setSelectionRange(selectionStart, selectionEnd);
+}*/
 
 // ********************************************************************************************* //
 // Toolbar buttons

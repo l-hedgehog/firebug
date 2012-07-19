@@ -1056,6 +1056,9 @@ var FirebugChrome =
     updateOrient: function(value)
     {
         var panelPane = FirebugChrome.$("fbPanelPane");
+        if (!panelPane)
+            return;
+
         var newOrient = value ? "vertical" : "horizontal";
         if (panelPane.orient == newOrient)
             return;
@@ -1386,14 +1389,14 @@ var FirebugChrome =
 
     onMenuShowing: function(popup)
     {
-        var detachFirebug = Dom.getElementsByAttribute(popup, "id", "menu_detachFirebug")[0];
+        var detachFirebug = Dom.getElementsByAttribute(popup, "id", "menu_firebug_detachFirebug")[0];
         if (detachFirebug)
         {
             detachFirebug.setAttribute("label", (Firebug.isDetached() ?
                 Locale.$STR("firebug.AttachFirebug") : Locale.$STR("firebug.DetachFirebug")));
         }
 
-        var toggleFirebug = Dom.getElementsByAttribute(popup, "id", "menu_toggleFirebug")[0];
+        var toggleFirebug = Dom.getElementsByAttribute(popup, "id", "menu_firebug_toggleFirebug")[0];
         if (toggleFirebug)
         {
             var fbContentBox = FirebugChrome.$("fbContentBox");
@@ -1469,7 +1472,7 @@ var FirebugChrome =
         // selected in the panel.
         var sel = target.ownerDocument.defaultView.getSelection();
         if (!this.contextMenuObject &&
-        !FirebugChrome.$("cmd_copy").getAttribute("disabled") &&
+            !FirebugChrome.$("cmd_copy").getAttribute("disabled") &&
             !sel.isCollapsed)
         {
             var menuitem = Menu.createMenuItem(popup, {label: "Copy"});
@@ -1691,7 +1694,7 @@ var FirebugChrome =
     breakOnNext: function(context, event)
     {
         // Avoid bubbling from associated options.
-        if (event.target.id != "cmd_toggleBreakOn")
+        if (event.target.id != "cmd_firebug_toggleBreakOn")
             return;
 
         if (!context)
@@ -2036,19 +2039,6 @@ function onPanelClick(event)
                 }
             }
         }
-        else if (Events.isControlClick(event) || Events.isMiddleClick(event))
-        {
-            if (!realRep || !realRep.browseObject(realObject, Firebug.currentContext))
-            {
-                if (rep && !(rep != realRep && rep.browseObject(object, Firebug.currentContext)))
-                {
-                    var panel = Firebug.getElementPanel(event.target);
-                    if (!panel || !panel.browseObject(realObject))
-                        return;
-                }
-            }
-            Events.cancelEvent(event);
-        }
     }
 }
 
@@ -2117,6 +2107,30 @@ function onPanelMouseUp(event)
                 Events.cancelEvent(event);
             }
         }
+    }
+    else if (Events.isControlClick(event) || Events.isMiddleClick(event))
+    {
+        var repNode = Firebug.getRepNode(event.target);
+        if (!repNode)
+            return;
+
+        var object = repNode.repObject;
+        var rep = Firebug.getRep(object, Firebug.currentContext);
+        var realObject = rep ? rep.getRealObject(object, Firebug.currentContext) : null;
+        var realRep = realObject ? Firebug.getRep(realObject, Firebug.currentContext) : rep;
+        if (!realObject)
+            realObject = object;
+
+        if (!realRep || !realRep.browseObject(realObject, Firebug.currentContext))
+        {
+            if (rep && !(rep != realRep && rep.browseObject(object, Firebug.currentContext)))
+            {
+                var panel = Firebug.getElementPanel(event.target);
+                if (!panel || !panel.browseObject(realObject))
+                    return;
+            }
+        }
+        Events.cancelEvent(event);
     }
 }
 

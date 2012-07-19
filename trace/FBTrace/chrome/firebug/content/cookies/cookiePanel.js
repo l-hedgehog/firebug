@@ -12,6 +12,8 @@ define([
     "firebug/lib/http",
     "firebug/lib/css",
     "firebug/lib/events",
+    "firebug/lib/array",
+    "firebug/lib/search",
     "firebug/cookies/menuUtils",
     "firebug/cookies/cookieReps",
     "firebug/cookies/headerResizer",
@@ -22,7 +24,7 @@ define([
     "firebug/cookies/cookiePermissions",
     "firebug/cookies/cookieClipboard",
 ],
-function(Xpcom, Obj, Locale, Domplate, Dom, Options, Persist, Str, Http, Css, Events,
+function(Xpcom, Obj, Locale, Domplate, Dom, Options, Persist, Str, Http, Css, Events, Arr, Search,
     MenuUtils, CookieReps, HeaderResizer, CookieObserver, CookieUtils, Cookie, Breakpoints,
     CookiePermissions, CookieClipboard) {
 
@@ -34,8 +36,7 @@ with (Domplate) {
 const Cc = Components.classes;
 const Ci = Components.interfaces;
 
-// Firecookie preferences
-const logEventsPref = "cookies.logEvents";
+// Cookies preferences
 const showRejectedCookies = "cookies.showRejectedCookies";
 const lastSortedColumn = "cookies.lastSortedColumn";
 const hiddenColsPref = "cookies.hiddenColumns";
@@ -44,8 +45,7 @@ const removeConfirmation = "cookies.removeConfirmation";
 // Services
 var cookieManager = Xpcom.CCSV("@mozilla.org/cookiemanager;1", "nsICookieManager2");
 
-const networkPrefDomain = "network.cookie";
-const cookieBehaviorPref = "cookieBehavior";
+const panelName = "cookies";
 
 // ********************************************************************************************* //
 // Panel Implementation
@@ -54,13 +54,13 @@ const cookieBehaviorPref = "cookieBehavior";
  * @panel This class represents the Cookies panel that is displayed within
  * Firebug UI.
  */
-function FireCookiePanel() {}
+function CookiePanel() {}
 
-FireCookiePanel.prototype = Obj.extend(Firebug.ActivablePanel,
-/** @lends FireCookiePanel */
+CookiePanel.prototype = Obj.extend(Firebug.ActivablePanel,
+/** @lends CookiePanel */
 {
-    name: "cookies",
-    title: Locale.$STR("firecookie.Panel"),
+    name: panelName,
+    title: Locale.$STR("cookies.Panel"),
     searchable: true,
     breakable: true,
     order: 200, // Place just after the Net panel.
@@ -85,10 +85,17 @@ FireCookiePanel.prototype = Obj.extend(Firebug.ActivablePanel,
 
         Firebug.ActivablePanel.initialize.apply(this, arguments);
 
+        Firebug.ConsolePanel.prototype.addListener(this);
+
         // Just after the initialization, so the this.document member is set.
         Firebug.CookieModule.addStyleSheet(this);
 
         this.refresh();
+    },
+
+    shutdown: function()
+    {
+        Firebug.ConsolePanel.prototype.removeListener(this);
     },
 
     /**
@@ -153,7 +160,7 @@ FireCookiePanel.prototype = Obj.extend(Firebug.ActivablePanel,
 
                 var receivedCookies = host.receivedCookies;
                 if (receivedCookies)
-                    cookies = extendArray(cookies, receivedCookies);
+                    cookies = Arr.extendArray(cookies, receivedCookies);
             }
         }
 
@@ -194,7 +201,7 @@ FireCookiePanel.prototype = Obj.extend(Firebug.ActivablePanel,
     initializeNode: function(oldPanelNode)
     {
         if (FBTrace.DBG_COOKIES)
-            FBTrace.sysout("cookies.FireCookiePanel.initializeNode");
+            FBTrace.sysout("cookies.CookiePanel.initializeNode");
 
         // xxxHonza 
         // This method isn't called when FB UI is detached. So, the columns
@@ -213,7 +220,7 @@ FireCookiePanel.prototype = Obj.extend(Firebug.ActivablePanel,
     destroyNode: function()
     {
         if (FBTrace.DBG_COOKIES)
-            FBTrace.sysout("cookies.FireCookiePanel.destroyNode");
+            FBTrace.sysout("cookies.CookiePanel.destroyNode");
 
         this.document.removeEventListener("mouseclick", this.onMouseClick, true);
         this.document.removeEventListener("mousedown", this.onMouseDown, true);
@@ -278,9 +285,9 @@ FireCookiePanel.prototype = Obj.extend(Firebug.ActivablePanel,
 
         if (Firebug.chrome.setGlobalAttribute)
         {
-            Firebug.chrome.setGlobalAttribute("cmd_resumeExecution", "breakable", "true");
-            Firebug.chrome.setGlobalAttribute("cmd_resumeExecution", "tooltiptext",
-                Locale.$STR("firecookie.Break On Cookie"));
+            Firebug.chrome.setGlobalAttribute("cmd_firebug_resumeExecution", "breakable", "true");
+            Firebug.chrome.setGlobalAttribute("cmd_firebug_resumeExecution", "tooltiptext",
+                Locale.$STR("cookies.Break On Cookie"));
         }
     },
 
@@ -289,18 +296,18 @@ FireCookiePanel.prototype = Obj.extend(Firebug.ActivablePanel,
         this.showToolbarButtons("fbCookieButtons", false);
     },
 
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
     // Options menu
+
     getOptionsMenuItems: function(context)
     {
         return [
-            MenuUtils.optionAllowGlobally(context, "firecookie.AllowGlobally",
-                networkPrefDomain, cookieBehaviorPref),
+            MenuUtils.optionAllowGlobally(context, "cookies.AllowGlobally",
+                "cookies.tip.AllowGlobally", "network.cookie", "cookieBehavior"),
             /*MenuUtils.optionMenu(context, "cookies.clearWhenDeny",
-                Firebug.prefDomain, clearWhenDeny),*/
-            MenuUtils.optionMenu(context, "cookies.LogEvents",
-                Firebug.prefDomain, logEventsPref),
-            MenuUtils.optionMenu(context, "firecookie.Confirm cookie removal",
-                Firebug.prefDomain, removeConfirmation)
+                "cookies.tip.clearWhenDeny", Firebug.prefDomain, clearWhenDeny),*/
+            MenuUtils.optionMenu(context, "cookies.Confirm cookie removal",
+                "cookies.tip.Confirm cookie removal", Firebug.prefDomain, removeConfirmation)
         ];
     },
 
@@ -322,15 +329,6 @@ FireCookiePanel.prototype = Obj.extend(Firebug.ActivablePanel,
         // Make sure default items (cmd_copy) is removed.
         CookieReps.Rep.getContextMenuItems.apply(this, arguments);
 
-        // Create Paste menu-item so, a new cookie can be pasted even if the user
-        // clicks within the panel area (not on a cookie row)
-        items.push({
-            label: Locale.$STR("firecookie.Paste"),
-            nol10n: true,
-            disabled: CookieClipboard.isCookieAvailable() ? false : true,
-            command: Obj.bindFixed(CookieReps.CookieRow.onPaste, CookieReps.CookieRow)
-        });
-
         return items;
     },
 
@@ -349,7 +347,7 @@ FireCookiePanel.prototype = Obj.extend(Firebug.ActivablePanel,
         this.matchSet = [];
 
         function findRow(node) { return Dom.getAncestorByClass(node, "cookieRow"); }
-        var search = new TextSearch(this.panelNode, findRow);
+        var search = new Search.TextSearch(this.panelNode, findRow);
 
         var cookieRow = search.find(text);
         if (!cookieRow)
@@ -450,8 +448,16 @@ FireCookiePanel.prototype = Obj.extend(Firebug.ActivablePanel,
 
     getBreakOnNextTooltip: function(enabled)
     {
-        return (enabled ? Locale.$STR("firecookie.Disable Break On Cookie") :
-            Locale.$STR("firecookie.Break On Cookie"));
+        return (enabled ? Locale.$STR("cookies.Disable Break On Cookie") :
+            Locale.$STR("cookies.Break On Cookie"));
+    },
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+    // Console Panel Listeners
+
+    onFilterSet: function(logTypes)
+    {
+        logTypes.cookies = 1;
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
@@ -460,7 +466,7 @@ FireCookiePanel.prototype = Obj.extend(Firebug.ActivablePanel,
     onActivationChanged: function(enable)
     {
         if (FBTrace.DBG_COOKIES || FBTrace.DBG_ACTIVATION)
-            FBTrace.sysout("firecookie.FireCookiePanel.onActivationChanged; " + enable);
+            FBTrace.sysout("cookies.CookiePanel.onActivationChanged; " + enable);
 
         if (enable)
         {
@@ -535,9 +541,9 @@ Firebug.CookieModule.ConsoleListener =
 // ********************************************************************************************* //
 // Registration
 
-Firebug.registerPanel(FireCookiePanel);
+Firebug.registerPanel(CookiePanel);
 
-return FireCookiePanel;
+return CookiePanel;
 
 // ********************************************************************************************* //
 }});

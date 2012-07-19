@@ -305,9 +305,10 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
             var dummyStyle = dummyElement.style;
 
             // xxxHonza: Not sure why this happens.
-            if (!dummyStyle && FBTrace.DBG_ERRORS)
+            if (!dummyStyle)
             {
-                FBTrace.sysout("css.markOverridenProps; ERROR dummyStyle is NULL");
+                if (FBTrace.DBG_ERRORS)
+                    FBTrace.sysout("css.markOverridenProps; ERROR dummyStyle is NULL");
                 return;
             }
 
@@ -539,16 +540,14 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
 
     updateOption: function(name, value)
     {
-        var options = [
-            "onlyShowAppliedStyles",
-            "showUserAgentCSS",
-            "expandShorthandProps",
-            "colorDisplay",
-            "showMozillaSpecificStyles"
-        ];
+        var options = new Set();
+        options.add("onlyShowAppliedStyles");
+        options.add("showUserAgentCSS");
+        options.add("expandShorthandProps");
+        options.add("colorDisplay");
+        options.add("showMozillaSpecificStyles");
 
-        var isRefreshOption = function(element) { return element == name; };
-        if (options.some(isRefreshOption))
+        if (options.has(name))
             this.refresh();
     },
 
@@ -614,7 +613,7 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
 
     getContextMenuItems: function(style, target)
     {
-        var items = CSSStyleSheetPanel.prototype.getContextMenuItems(style, target);
+        var items = CSSStyleSheetPanel.prototype.getContextMenuItems.apply(this, [style, target]);
         var insertIndex = 0;
 
         for (var i = 0; i < items.length; ++i)

@@ -46,6 +46,7 @@ const versionURL = "chrome://firebug/content/branch.properties";
 const firebugURLs =  // TODO chrome.js
 {
     main: "http://www.getfirebug.com",
+    help: "http://www.getfirebug.com/help",
     FAQ: "http://getfirebug.com/wiki/index.php/FAQ",
     docs: "http://www.getfirebug.com/docs.html",
     keyboard: "http://getfirebug.com/wiki/index.php/Keyboard_and_Mouse_Shortcuts",
@@ -1187,6 +1188,13 @@ window.Firebug =
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+    dispatch: function(listeners, eventId, args)
+    {
+        Events.dispatch(listeners, eventId, args);
+    },
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
     // URL mapping
 
     getObjectByURL: function(context, url)
@@ -1424,6 +1432,10 @@ Firebug.getConsoleByGlobal = function getConsoleByGlobal(global)
         if (context)
         {
             var handler = Firebug.Console.injector.getConsoleHandler(context, global);
+
+            if (!handler)
+                handler = Firebug.Console.isReadyElsePreparing(context, global);;
+
             if (handler)
             {
                 FBTrace.sysout("Firebug.getConsoleByGlobal " + handler.console + " for " +
@@ -1436,10 +1448,12 @@ Firebug.getConsoleByGlobal = function getConsoleByGlobal(global)
                 FBTrace.sysout("Firebug.getConsoleByGlobal FAILS, no handler for global " +
                     global + " " + Win.safeGetWindowLocation(global), global);
         }
-
-        if (FBTrace.DBG_ERRORS)
-            FBTrace.sysout("Firebug.getConsoleByGlobal FAILS, no context for global " +
-                global, global);
+        else
+        {
+            if (FBTrace.DBG_ERRORS)
+                FBTrace.sysout("Firebug.getConsoleByGlobal FAILS, no context for global " +
+                    global, global);
+        }
     }
     catch (exc)
     {
