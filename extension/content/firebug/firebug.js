@@ -21,11 +21,10 @@ define([
     "firebug/lib/array",
     "firebug/lib/dom",
     "firebug/lib/http",
-    "firebug/js/fbs",
     "firebug/trace/traceListener",
 ],
 function(FBL, Obj, Firefox, ChromeFactory, Domplate, Options, Locale, Events,
-    Wrapper, Url, Css, Win, Str, Arr, Dom, Http, FBS, TraceListener) {
+    Wrapper, Url, Css, Win, Str, Arr, Dom, Http, TraceListener) {
 
 // ********************************************************************************************* //
 // Constants
@@ -42,19 +41,6 @@ const promptService = Cc["@mozilla.org/embedcomp/prompt-service;1"].getService(C
 const versionURL = "chrome://firebug/content/branch.properties";
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-const firebugURLs =  // TODO chrome.js
-{
-    main: "http://www.getfirebug.com",
-    help: "http://www.getfirebug.com/help",
-    FAQ: "http://getfirebug.com/wiki/index.php/FAQ",
-    docs: "http://www.getfirebug.com/docs.html",
-    keyboard: "http://getfirebug.com/wiki/index.php/Keyboard_and_Mouse_Shortcuts",
-    discuss: "http://groups.google.com/group/firebug",
-    issues: "http://code.google.com/p/fbug/issues/list",
-    donate: "http://getfirebug.com/getinvolved",
-    issue5110: "http://code.google.com/p/fbug/issues/detail?id=5110"
-};
 
 const scriptBlockSize = 20;
 
@@ -265,10 +251,6 @@ window.Firebug =
         // Firebug.TabWatcher is ready.
         if (Firebug.PanelActivation)
             Firebug.PanelActivation.activatePanelTypes(panelTypes);
-
-        // bug712289
-        if (Firebug.PanelActivation && !FBS.isJSDAvailable())
-            Firebug.PanelActivation.disablePanel(this.getPanelType("script"));
 
         // Tell the modules the UI is up.
         Events.dispatch(modules, "initializeUI", [detachArgs]);
@@ -1298,11 +1280,6 @@ window.Firebug =
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-    visitWebsite: function(which)
-    {
-        Win.openNewTab(firebugURLs[which]);
-    },
-
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
     // nsISupports
 
@@ -1737,9 +1714,11 @@ Firebug.Panel = Obj.extend(new Firebug.Listener(),
 
         if (this.panelNode)
         {
+            var scrollTop = this.panelNode.scrollTop;
             this.panelNode = doc.adoptNode(this.panelNode, true);
             this.panelNode.ownerPanel = this;
             doc.body.appendChild(this.panelNode);
+            this.panelNode.scrollTop = scrollTop;
         }
     },
 

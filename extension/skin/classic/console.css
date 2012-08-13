@@ -450,7 +450,6 @@
 
 .objectLink-regexp,
 .objectLink-Storage,
-.objectLink-StorageList,
 .objectLink-object,
 .objectLink-Date {
     font-family: Lucida Grande, sans-serif;
@@ -639,7 +638,7 @@
     padding-left: 18px;
 }
 
-.logRow-log .objectBox-array > .arrayProperties {
+.logRow-log .objectBox-array > .arrayProperties:not(:empty) {
     padding-left: 18px;
 }
 
