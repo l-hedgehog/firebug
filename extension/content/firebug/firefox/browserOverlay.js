@@ -9,7 +9,11 @@ var {classes: Cc, interfaces: Ci, utils: Cu} = Components;
 
 Cu.import("resource://firebug/fbtrace.js");
 Cu.import("resource://firebug/loader.js");
-Cu.import("resource://firebug/prefLoader.js");
+
+// Make sure PrefLoader variable doesn't leak into the global scope.
+var prefLoaderScope = {};
+Cu.import("resource://firebug/prefLoader.js", prefLoaderScope);
+var PrefLoader = prefLoaderScope.PrefLoader;
 
 const firstRunPage = "https://getfirebug.com/firstrun#Firebug ";
 
@@ -374,10 +378,10 @@ Firebug.GlobalUI =
         PrefLoader.setPref(option, checked);
     },
 
-    onMenuShowing: function(popup)
+    onMenuShowing: function(popup, event)
     {
-        // If this popup is already open the event comes from a sub menu, just ignore it.
-        if (popup.state == "open")
+        // If the event comes from a sub menu, just ignore it.
+        if (popup != event.target)
             return;
 
         while (popup.lastChild)
@@ -449,9 +453,9 @@ Firebug.GlobalUI =
         document.dispatchEvent(event);
     },
 
-    onMenuHiding: function(popup)
+    onMenuHiding: function(popup, event)
     {
-        if (popup.state == "open")
+        if (popup != event.target)
             return;
 
         // xxxHonza: I don't know why the timeout must be here, but if it isn't
@@ -505,13 +509,6 @@ Firebug.GlobalUI =
         });
     },
 
-    openFirstRunPage: function()
-    {
-        var version = Firebug.GlobalUI.getVersion();
-        url = firstRunPage + version;
-        gBrowser.selectedTab = gBrowser.addTab(url, null, null, null);
-    },
-
     setPosition: function(newPosition)
     {
         // todo
@@ -557,7 +554,109 @@ Firebug.GlobalUI =
         });
 
         return true;
-    }
+    },
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+    // Page Context Menu Overlay
+
+    loadContextMenuOverlay: function(win)
+    {
+        if (typeof(win.nsContextMenu) == "undefined")
+            return;
+
+        // https://bugzilla.mozilla.org/show_bug.cgi?id=433168
+        var setTargetOriginal = this.setTargetOriginal = win.nsContextMenu.prototype.setTarget;
+        win.nsContextMenu.prototype.setTarget = function(aNode, aRangeParent, aRangeOffset)
+        {
+            setTargetOriginal.apply(this, arguments);
+
+            if (this.isTargetAFormControl(aNode))
+                this.shouldDisplay = true;
+        };
+
+        // Hide built-in inspector if the pref says so.
+        var initItemsOriginal = this.initItemsOriginal = win.nsContextMenu.prototype.initItems;
+        win.nsContextMenu.prototype.initItems = function()
+        {
+            initItemsOriginal.apply(this, arguments);
+
+            // Hide built-in inspector menu item if the pref "extensions.firebug.hideDefaultInspector"
+            // says so. Note that there is also built-in preference "devtools.inspector.enable" that
+            // can be used for the same purpose.
+            var hideInspect = PrefLoader.getPref("hideDefaultInspector");
+            if (hideInspect)
+            {
+                this.showItem("inspect-separator", false);
+                this.showItem("context-inspect", false);
+            }
+        }
+    },
+
+    unloadContextMenuOverlay: function(win)
+    {
+        if (typeof(win.nsContextMenu) == "undefined")
+            return;
+
+        win.nsContextMenu.prototype.setTarget = this.setTargetOriginal;
+        win.nsContextMenu.prototype.initItems = this.initItemsOriginal;
+    },
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+    // First Run Page
+
+    loadFirstRunPage: function(win, reason)
+    {
+        if (checkFirebugVersion(PrefLoader.getPref("currentVersion")) <= 0)
+            return;
+
+        // Do not show the first run page when Firebug is being updated. It'll be displayed
+        // the next time the browser is restarted
+        // # ADDON_UPGRADE == 7
+        if (reason == 7)
+            return;
+
+        // Open the page in the top most window, so the user can see it immediately.
+        var wm = Cc["@mozilla.org/appshell/window-mediator;1"].getService(Ci.nsIWindowMediator);
+        if (wm.getMostRecentWindow("navigator:browser") == win.top)
+        {
+            // Update the preference to make sure the page is not displayed again.
+            // To avoid being annoying when Firefox crashes, forcibly save it, too.
+            var version = Firebug.GlobalUI.getVersion();
+            PrefLoader.setPref("currentVersion", version);
+
+            if (PrefLoader.getPref("showFirstRunPage"))
+            {
+                var timeout = setTimeout(function()
+                {
+                    if (window.closed)
+                        return;
+
+                    Firebug.GlobalUI.openFirstRunPage();
+                }, 1000);
+
+                window.addEventListener("unload", function()
+                {
+                    clearTimeout(timeout);
+                }, false);
+            }
+        }
+    },
+
+    openFirstRunPage: function()
+    {
+        var version = Firebug.GlobalUI.getVersion();
+        url = firstRunPage + version;
+
+        // Open the firstRunPage in background
+        /*gBrowser.selectedTab = */gBrowser.addTab(url, null, null, null);
+
+        // Make sure prefs are stored, otherwise the firstRunPage would be displayed
+        // again if Firefox crashes.
+        setTimeout(function()
+        {
+            PrefLoader.forceSave();
+        }, 400);
+    },
 }
 
 // ********************************************************************************************* //
@@ -1072,8 +1171,8 @@ $menupopupOverlay($("menuWebDeveloperPopup"), [
         $menupopup({
             id: "menu_firebug_firebugMenuPopup",
             "class": "fbFirebugMenuPopup",
-            onpopupshowing: "return Firebug.GlobalUI.onMenuShowing(this);",
-            onpopuphiding: "return Firebug.GlobalUI.onMenuHiding(this);"
+            onpopupshowing: "return Firebug.GlobalUI.onMenuShowing(this, event);",
+            onpopuphiding: "return Firebug.GlobalUI.onMenuHiding(this, event);"
         })
     ]),
     $menuseparator({
@@ -1095,8 +1194,8 @@ $menupopupOverlay($("appmenu_webDeveloper_popup"), [
         $menupopup({
             id: "appmenu_firebugMenuPopup",
             "class": "fbFirebugMenuPopup",
-            onpopupshowing: "return Firebug.GlobalUI.onMenuShowing(this);",
-            onpopuphiding: "return Firebug.GlobalUI.onMenuHiding(this);"
+            onpopupshowing: "return Firebug.GlobalUI.onMenuShowing(this, event);",
+            onpopuphiding: "return Firebug.GlobalUI.onMenuHiding(this, event);"
         })
     ]),
     $menuseparator({
@@ -1117,8 +1216,8 @@ $menupopupOverlay($("toolsPopup"), [
         $menupopup({
             id: "toolsmenu_firebugMenuPopup",
             "class": "fbFirebugMenuPopup",
-            onpopupshowing: "return Firebug.GlobalUI.onMenuShowing(this);",
-            onpopupshowing: "return Firebug.GlobalUI.onMenuHiding(this);"
+            onpopupshowing: "return Firebug.GlobalUI.onMenuShowing(this, event);",
+            onpopupshowing: "return Firebug.GlobalUI.onMenuHiding(this, event);"
         })
     ])
 ]);
@@ -1224,9 +1323,7 @@ var elements = cloneArray(document.getElementsByClassName("fbInternational"));
 Locale.internationalizeElements(document, elements, ["label", "tooltiptext", "aria-label"]);
 
 // ********************************************************************************************* //
-// First Run Page
-
-var wm = Cc["@mozilla.org/appshell/window-mediator;1"].getService(Ci.nsIWindowMediator);
+// Version Checker
 
 function checkFirebugVersion(currentVersion)
 {
@@ -1241,65 +1338,6 @@ function checkFirebugVersion(currentVersion)
     return versionChecker.compare(version, currentVersion);
 }
 
-if (checkFirebugVersion(PrefLoader.getPref("currentVersion")) > 0)
-{
-    // Open the page in the top most window, so the user can see it immediately.
-    if (wm.getMostRecentWindow("navigator:browser") == window.top)
-    {
-        // Don't forget to update the preference, so the page is not displayed again
-        var version = Firebug.GlobalUI.getVersion();
-        PrefLoader.setPref("currentVersion", version);
-
-        if (PrefLoader.getPref("showFirstRunPage"))
-        {
-            var timeout = setTimeout(function()
-            {
-                if (window.closed)
-                    return;
-
-                Firebug.GlobalUI.openFirstRunPage();
-            }, 1000);
-
-            window.addEventListener("unload", function()
-            {
-                clearTimeout(timeout);
-            }, false);
-        }
-    }
-}
-
-// ********************************************************************************************* //
-// Firefox Page Context Menu
-
-if (typeof(nsContextMenu) != "undefined")
-{
-    // https://bugzilla.mozilla.org/show_bug.cgi?id=433168
-    var setTargetOriginal = nsContextMenu.prototype.setTarget;
-    nsContextMenu.prototype.setTarget = function(aNode, aRangeParent, aRangeOffset)
-    {
-        setTargetOriginal.apply(this, arguments);
-        if (this.isTargetAFormControl(aNode))
-            this.shouldDisplay = true;
-    };
-
-    // Hide built-in inspector if the pref says so.
-    var initItemsOriginal = nsContextMenu.prototype.initItems;
-    nsContextMenu.prototype.initItems = function()
-    {
-        initItemsOriginal.apply(this, arguments);
-
-        // Hide built-in inspector menu item if the pref "extensions.firebug.hideDefaultInspector"
-        // says so. Note that there is also built-in preference "devtools.inspector.enable" that
-        // can be used for the same purpose.
-        var hideInspect = PrefLoader.getPref("hideDefaultInspector");
-        if (hideInspect)
-        {
-            this.showItem("inspect-separator", false);
-            this.showItem("context-inspect", false);
-        }
-    }
-}
-
 // ********************************************************************************************* //
 // All Pages Activation" is on
 
@@ -1308,6 +1346,13 @@ if (PrefLoader.getPref("allPagesActivation") == "on" || !PrefLoader.getPref("del
 {
     Firebug.GlobalUI.startFirebug(function()
     {
+        var browser = Firebug.Firefox.getBrowserForWindow(this);
+        var uri = Firebug.Firefox.getCurrentURI();
+
+        // Open Firebug UI (e.g. if the annotations say so, issue 5623)
+        if (uri && Firebug.TabWatcher.shouldCreateContext(browser, uri.spec, null))
+            Firebug.toggleBar(true);
+
         FBTrace.sysout("Firebug loaded by default since 'allPagesActivation' is on " +
             "or 'delayLoad' is false");
     });

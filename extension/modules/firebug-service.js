@@ -30,7 +30,6 @@ const jsdIErrorHook = Ci.jsdIErrorHook;
 const jsdIFilter = Components.interfaces.jsdIFilter;
 const nsISupports = Ci.nsISupports;
 const nsIPrefBranch = Ci.nsIPrefBranch;
-const nsIPrefBranch2 = Ci.nsIPrefBranch2;
 const nsIComponentRegistrar = Ci.nsIComponentRegistrar;
 const nsIFactory = Ci.nsIFactory;
 const nsIConsoleService = Ci.nsIConsoleService;
@@ -754,7 +753,7 @@ var fbs =
 
         this.profiling = false;
 
-        prefs = PrefService.getService(nsIPrefBranch2);
+        prefs = PrefService.getService(nsIPrefBranch);
         fbs.prefDomain = "extensions.firebug";
         prefs.addObserver(fbs.prefDomain, fbs, false);
 
@@ -3763,7 +3762,7 @@ var fbs =
             var bps = breakpointStore.getItem(url);
 
             // Do not restore "Run unit this line" breakpoints. This should solve complaints
-            // about Firebug braking in the sourece even if there are no breakpoints in
+            // about Firebug breaking in the source even if there are no breakpoints in
             // Firebug UI.
             if (bps.type == BP_UNTIL)
                 continue;
@@ -4043,7 +4042,7 @@ var fbs =
 
                     // stack empty
                     if (unhookAtBottom && hookFrameCount == 0)
-                       this.unhookFunctions();
+                       fbs.unhookFunctions();
 
                     contextCached = callBack(contextCached, frame, hookFrameCount, false);
                     break;

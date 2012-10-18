@@ -1,4 +1,3 @@
-/* See license.txt for terms of usage */
 
 .panelNode-console {
     overflow-x: hidden;
@@ -448,8 +447,9 @@
 
 /*************************************************************************************************/
 
+.objectLink-event,
+.objectLink-eventLog,
 .objectLink-regexp,
-.objectLink-Storage,
 .objectLink-object,
 .objectLink-Date {
     font-family: Lucida Grande, sans-serif;
@@ -640,6 +640,11 @@
 
 .logRow-log .objectBox-array > .arrayProperties:not(:empty) {
     padding-left: 18px;
+}
+
+.objectBox-array > .objectTitle {
+    font-weight: bold;
+    color: DarkGreen;
 }
 
 /*****************************************************************************************/

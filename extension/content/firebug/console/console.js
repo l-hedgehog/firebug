@@ -13,6 +13,8 @@ define([
     "firebug/chrome/searchBox",
     "firebug/console/consolePanel",
     "firebug/console/commandEditor",
+    "firebug/console/functionMonitor",
+    "firebug/console/performanceTiming",
 ],
 function(Obj, Firebug, Firefox, Events, Win, Search, Xml, Options) {
 
@@ -402,22 +404,6 @@ Firebug.Console = Obj.extend(ActivableConsole,
             if (FBTrace.DBG_ERRORS)
                 FBTrace.sysout("console.setStatus ERROR no firebugStatus element");
         }
-    },
-
-    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-    // Firebug.Debugger listener
-
-    onMonitorScript: function(context, frame)
-    {
-        Firebug.Console.log(frame, context);
-    },
-
-    onFunctionCall: function(context, frame, depth, calling)
-    {
-        if (calling)
-            Firebug.Console.openGroup([frame, "depth:"+depth], context);
-        else
-            Firebug.Console.closeGroup(context);
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //

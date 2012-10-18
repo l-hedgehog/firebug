@@ -285,6 +285,7 @@ FirebugReps.Func = domplate(Firebug.Rep,
         var monitored = scriptInfo ? FBS.fbs.isMonitored(scriptInfo.sourceFile.href,
             scriptInfo.lineNo) : false;
 
+        var self = this;
         var name = script ? StackFrame.getFunctionName(script, context) : fn.name;
         return [
             {
@@ -293,7 +294,11 @@ FirebugReps.Func = domplate(Firebug.Rep,
                 nol10n: true,
                 type: "checkbox",
                 checked: monitored,
-                command: Obj.bindFixed(this.monitor, this, fn, monitored)
+                command: function()
+                {
+                    var checked = this.hasAttribute("checked");
+                    self.monitor(fn, !checked);
+                }
             },
             "-",
             {
@@ -508,43 +513,77 @@ FirebugReps.Reference = domplate(Firebug.Rep,
 });
 
 // ********************************************************************************************* //
+// Array Helpers
 
-FirebugReps.Arr = domplate(Firebug.Rep,
+function mightBeArray(obj, win)
 {
-    tag:
-        OBJECTBOX({_repObject: "$object",
-            $hasTwisty: "$object|hasSpecialProperties",
-            onclick: "$onToggleProperties"},
-            SPAN({"class": "arrayLeftBracket", role: "presentation"}, "["),
-            FOR("item", "$object|longArrayIterator",
-                TAG("$item.tag", {object: "$item.object"}),
-                SPAN({"class": "arrayComma", role: "presentation"}, "$item.delim")
-            ),
-            SPAN({"class": "arrayRightBracket", role: "presentation"}, "]"),
-            SPAN({"class": "arrayProperties", role: "group"})
-        ),
+    try
+    {
+        if (!obj)
+            return false;
+        // do this first to avoid security 1000 errors
+        else if (obj instanceof Ci.nsIDOMHistory)
+            return false;
 
-    shortTag:
-        OBJECTBOX({_repObject: "$object",
-            $hasTwisty: "$object|hasSpecialProperties",
-            onclick: "$onToggleProperties"},
-            SPAN({"class": "arrayLeftBracket", role: "presentation"}, "["),
-            FOR("item", "$object|shortArrayIterator",
-                TAG("$item.tag", {object: "$item.object"}),
-                SPAN({"class": "arrayComma", role: "presentation"}, "$item.delim")
-            ),
-            SPAN({"class": "arrayRightBracket"}, "]"),
-            SPAN({"class": "arrayProperties", role: "group"})
-        ),
+        var view = Wrapper.getContentView(win || window);
+
+        // do this first to avoid security 1000 errors
+        if ("StorageList" in view && obj instanceof view.StorageList)
+            return false;
+        // do this first to avoid exceptions
+        else if (obj.toString() === "[xpconnect wrapped native prototype]")
+            return false;
+    }
+    catch (exc)
+    {
+        try
+        {
+            if (FBTrace.DBG_ERRORS)
+            {
+                // Something weird: without the try/catch, OOM, with no exception??
+                FBTrace.sysout("mightBeArray FAILS: " + exc, exc);
+                FBTrace.sysout("mightBeArray Fails on obj " + obj);
+            }
+        }
+        catch (exexc)
+        {
+            FBTrace.sysout("mightBeArray double ERROR " + exexc, exexc);
+        }
+    }
+
+    return true;
+}
+
+// ********************************************************************************************* //
+
+FirebugReps.ArrBase = domplate(FirebugReps.Obj,
+{
+    className: "array",
+    toggles: new ToggleBranch.ToggleBranch(),
+
+    titleTag:
+        SPAN({"class": "objectTitle"}, "$object|getTitleTag"),
+
+    getTitle: function(object, context)
+    {
+        return "[" + object.length + "]";
+    },
+
+    supportsObject: function(object, type, context)
+    {
+        return this.isArray(object, context ? context.window : null);
+    },
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
     longArrayIterator: function(array)
     {
-       return this.arrayIterator(array, 300);
+        return this.arrayIterator(array, 300);
     },
 
     shortArrayIterator: function(array)
     {
-       return this.arrayIterator(array, Options.get("ObjectShortIteratorMax"));
+        return this.arrayIterator(array, Options.get("ObjectShortIteratorMax"));
     },
 
     arrayIterator: function(array, max)
@@ -585,8 +624,6 @@ FirebugReps.Arr = domplate(Firebug.Rep,
 
         return items;
     },
-
-    toggles: new ToggleBranch.ToggleBranch(),
 
     getItemIndex: function(child)
     {
@@ -662,16 +699,9 @@ FirebugReps.Arr = domplate(Firebug.Rep,
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-    className: "array",
-
-    supportsObject: function(object, type, context)
-    {
-        return this.isArray(object, context ? context.window : null);
-    },
-
     highlightObject: function(object, context, target)
     {
-        // Highlighting huge amount of elements on the page can cause sericous performance
+        // Highlighting huge amount of elements on the page can cause serious performance
         // problems (see issue 4736). So, avoid highlighting if the number of elements in
         // the array exceeds specified limit.
         var arr = this.getRealObject(object, context);
@@ -696,14 +726,9 @@ FirebugReps.Arr = domplate(Firebug.Rep,
     },
 
     // http://code.google.com/p/fbug/issues/detail?id=874
-    // BEGIN Yahoo BSD Source (modified here)  YAHOO.lang.isArray, YUI 2.2.2 June 2007
     isArray: function(obj, win)
     {
-        win = win || window;
-
-        var view = Wrapper.getContentView(win);
-
-        try
+        if (mightBeArray(obj, win))
         {
             if (!obj)
                 return false;
@@ -711,42 +736,133 @@ FirebugReps.Arr = domplate(Firebug.Rep,
             else if (obj instanceof Ci.nsIDOMHistory)
                 return false;
             // do this first to avoid exceptions
-            else if (obj.toString() === "[xpconnect wrapped native prototype]")
+            else if (obj.toString && obj.toString() === "[xpconnect wrapped native prototype]")
                 return false;
             else if (isFinite(obj.length) && typeof obj.splice === "function")
                 return true;
-            else if (isFinite(obj.length) && typeof obj.callee === "function") // arguments
+            else if (Arr.isArray(obj))
                 return true;
-            else if (obj instanceof view.HTMLCollection)
-                return true;
-            else if (obj instanceof view.NodeList)
-                return true;
-        }
-        catch (exc)
-        {
-            try
-            {
-                if (FBTrace.DBG_ERRORS)
-                {
-                    // Something weird: without the try/catch, OOM, with no exception??
-                    FBTrace.sysout("isArray FAILS: " + exc, exc);
-                    FBTrace.sysout("isArray Fails on obj " + obj);
-                }
-            }
-            catch (exexc)
-            {
-                FBTrace.sysout("isArray double ERROR " + exexc, exexc);
-            }
         }
 
         return false;
     },
-    // END Yahoo BSD SOURCE See license below.
+});
 
-    getTitle: function(object, context)
+// ********************************************************************************************* //
+
+FirebugReps.Arr = domplate(FirebugReps.ArrBase,
+{
+    tag:
+        OBJECTBOX({_repObject: "$object",
+            $hasTwisty: "$object|hasSpecialProperties",
+            onclick: "$onToggleProperties"},
+            SPAN({"class": "arrayLeftBracket", role: "presentation"}, "["),
+            FOR("item", "$object|longArrayIterator",
+                TAG("$item.tag", {object: "$item.object"}),
+                SPAN({"class": "arrayComma", role: "presentation"}, "$item.delim")
+            ),
+            SPAN({"class": "arrayRightBracket", role: "presentation"}, "]"),
+            SPAN({"class": "arrayProperties", role: "group"})
+        ),
+
+    shortTag:
+        OBJECTBOX({_repObject: "$object",
+            $hasTwisty: "$object|hasSpecialProperties",
+            onclick: "$onToggleProperties"},
+            SPAN({"class": "arrayLeftBracket", role: "presentation"}, "["),
+            FOR("item", "$object|shortArrayIterator",
+                TAG("$item.tag", {object: "$item.object"}),
+                SPAN({"class": "arrayComma", role: "presentation"}, "$item.delim")
+            ),
+            SPAN({"class": "arrayRightBracket"}, "]"),
+            SPAN({"class": "arrayProperties", role: "group"})
+        ),
+
+    // http://code.google.com/p/fbug/issues/detail?id=874
+    isArray: function(obj, win)
     {
-        return "[" + object.length + "]";
+        if (mightBeArray(obj, win))
+        {
+            if (isFinite(obj.length) && typeof obj.callee === "function") // arguments
+                return true;
+            else if (Arr.isArray(obj))
+                return true;
+        }
+        return false;
     }
+});
+
+// ********************************************************************************************* //
+
+/**
+ * Any arrayish object that is not directly Array type (e.g. HTMLCollection, NodeList, etc.)
+ */
+FirebugReps.ArrayLikeObject = domplate(FirebugReps.ArrBase,
+{
+    tag:
+        OBJECTBOX({_repObject: "$object",
+            $hasTwisty: "$object|hasSpecialProperties",
+            onclick: "$onToggleProperties"},
+            A({"class": "objectTitle objectLink", onclick: "$onClickTitle"},
+                "$object|getTitle"
+            ),
+            SPAN({"class": "arrayLeftBracket", role: "presentation"}, "["),
+            FOR("item", "$object|longArrayIterator",
+                TAG("$item.tag", {object: "$item.object"}),
+                SPAN({"class": "arrayComma", role: "presentation"}, "$item.delim")
+            ),
+            SPAN({"class": "arrayRightBracket", role: "presentation"}, "]"),
+            SPAN({"class": "arrayProperties", role: "group"})
+        ),
+
+    shortTag:
+        OBJECTBOX({_repObject: "$object",
+            $hasTwisty: "$object|hasSpecialProperties",
+            onclick: "$onToggleProperties"},
+            A({"class": "objectTitle objectLink", onclick: "$onClickTitle"},
+                "$object|getTitle"
+            ),
+            SPAN({"class": "arrayLeftBracket", role: "presentation"}, "["),
+            FOR("item", "$object|shortArrayIterator",
+                TAG("$item.tag", {object: "$item.object"}),
+                SPAN({"class": "arrayComma", role: "presentation"}, "$item.delim")
+            ),
+            SPAN({"class": "arrayRightBracket"}, "]"),
+            SPAN({"class": "arrayProperties", role: "group"})
+        ),
+
+    onClickTitle: function(event)
+    {
+        var obj = Firebug.getRepObject(event.target);
+        Firebug.chrome.select(obj);
+    },
+
+    getTitle: function(obj, context)
+    {
+        var arr = Wrapper.unwrapObject(obj);
+        const re =/\[object ([^\]]*)/;
+        var label = Str.safeToString(arr);
+        var m = re.exec(label);
+        return m[1] || label;
+    },
+
+    isArray: function(obj, win)
+    {
+        if (mightBeArray(obj, win))
+        {
+            var view = Wrapper.getContentView(win || window);
+            var arr = Wrapper.unwrapObject(obj);
+
+            if (isFinite(obj.length) && typeof obj.splice === "function" && obj.length)
+                return true;
+            else if (arr instanceof view.HTMLCollection)
+                return true;
+            else if (arr instanceof view.NodeList)
+                return true;
+        }
+
+        return false;
+    },
 });
 
 // ********************************************************************************************* //
@@ -907,14 +1023,12 @@ FirebugReps.Element = domplate(Firebug.Rep,
     {
         try
         {
-            return elt.getAttribute("class")
-                ? ("." + elt.getAttribute("class").split(" ")[0])
-                : "";
+            return elt.classList.length > 0 ? ("." + elt.classList[0]) : "";
         }
         catch (err)
         {
+            return "";
         }
-        return "";
     },
 
     getValue: function(elt)
@@ -1108,8 +1222,11 @@ FirebugReps.Element = domplate(Firebug.Rep,
 
     getContextMenuItems: function(elt, target, context)
     {
+        // XXX: Temporary fix for issue 5577.
+        if (Dom.getAncestorByClass(target, "cssElementRuleContainer"))
+            return;
+
         var type;
-        var monitored = EventMonitor.areEventsMonitored(elt, null, context);
         var items = [];
 
         if (Xml.isElementHTML(elt) || Xml.isElementXHTML(elt))
@@ -1175,9 +1292,12 @@ FirebugReps.Element = domplate(Firebug.Rep,
                 tooltiptext: "html.tip.Show_Events_In_Console",
                 id: "fbShowEventsInConsole",
                 type: "checkbox",
-                checked: monitored,
-                command: Obj.bindFixed(EventMonitor.toggleMonitorEvents,
-                    EventMonitor, elt, null, monitored, context)
+                checked: EventMonitor.areEventsMonitored(elt, null, context),
+                command: function()
+                {
+                    var checked = this.hasAttribute("checked");
+                    EventMonitor.toggleMonitorEvents(elt, null, !checked, context);
+                }
             },
             "-",
             {
@@ -1588,14 +1708,21 @@ FirebugReps.Window = domplate(Firebug.Rep,
 
 FirebugReps.Event = domplate(Firebug.Rep,
 {
-    tag: TAG("$copyEventTag", {object: "$object|copyEvent"}),
+    className: "event",
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+    tag:
+        TAG("$copyEventTag", {object: "$object|copyEvent"}),
 
     copyEventTag:
         OBJECTLINK("$object|summarizeEvent"),
 
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
     summarizeEvent: function(event)
     {
-        var info = [event.type, ' '];
+        var info = [event.type, " "];
 
         var eventFamily = Events.getEventFamily(event.type);
         if (eventFamily == "mouse")
@@ -1613,8 +1740,6 @@ FirebugReps.Event = domplate(Firebug.Rep,
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-    className: "object",
-
     supportsObject: function(object, type)
     {
         return object instanceof window.Event || object instanceof Dom.EventCopy;
@@ -1624,6 +1749,52 @@ FirebugReps.Event = domplate(Firebug.Rep,
     {
         return "Event " + event.type;
     }
+});
+
+// ********************************************************************************************* //
+
+FirebugReps.EventLog = domplate(FirebugReps.Event,
+{
+    className: "eventLog",
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+    tag:
+        TAG("$copyEventTag", {object: "$object|copyEvent"}),
+
+    copyEventTag:
+        SPAN(
+            OBJECTLINK("$object|summarizeEvent"),
+            SPAN("&nbsp"),
+            SPAN("&#187;"),
+            SPAN("&nbsp"),
+            TAG("$object|getTargetTag", {object: "$object|getTarget"})
+        ),
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+    copyEvent: function(log)
+    {
+        return new Dom.EventCopy(log.event);
+    },
+
+    getTarget: function(event)
+    {
+        return event.target;
+    },
+
+    getTargetTag: function(event)
+    {
+        var rep = Firebug.getRep(event.target);
+        return rep.shortTag ? rep.shortTag : rep.tag;
+    },
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+    supportsObject: function(object, type)
+    {
+        return object instanceof EventMonitor.EventLog;
+    },
 });
 
 // ********************************************************************************************* //
@@ -2286,11 +2457,12 @@ FirebugReps.ErrorMessage = domplate(Firebug.Rep,
         // so let's try to skip those
         if (error.source)
             return "syntax";
-        else if (error.lineNo == 1 && Url.getFileExtension(error.href) != "js")
-            return "none";
         else if (error.category == "css")
             return "show";
         else if (!error.href || !error.lineNo)
+            return "none";
+        // Why do we have that at all?
+        else if (error.lineNo == 1 && Url.getFileExtension(error.href) != "js")
             return "none";
         else
             return "show";
@@ -3086,12 +3258,14 @@ Firebug.registerRep(
     FirebugReps.Except,
     FirebugReps.XML,
     FirebugReps.Arr,
+    FirebugReps.ArrayLikeObject,
     FirebugReps.XPathResult,
     FirebugReps.Storage,
     FirebugReps.Attr,
     FirebugReps.Date,
     FirebugReps.NamedNodeMap,
-    FirebugReps.Reference
+    FirebugReps.Reference,
+    FirebugReps.EventLog
 );
 
 Firebug.setDefaultReps(FirebugReps.Func, FirebugReps.Obj);
