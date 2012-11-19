@@ -24,6 +24,8 @@ const reCloseBracket = /[\]\)\}]/;
 const reJSChar = /[a-zA-Z0-9$_]/;
 const reLiteralExpr = /^[ "0-9,]*$/;
 
+var measureCache = {};
+
 // ********************************************************************************************* //
 // JavaScript auto-completion
 
@@ -215,7 +217,14 @@ Firebug.JSAutoCompleter = function(textBox, completionBox, options)
             this.completions = null;
             return;
         }
+        if (!this.completionBase.candidates.length && !prefix)
+        {
+            // Don't complete empty objects -> toString.
+            this.completions = null;
+            return;
+        }
 
+        var mustMatchFirstLetter = (this.completionBase.expr === "");
         var clist = [
             this.completionBase.candidates,
             this.completionBase.hiddenCandidates
@@ -228,9 +237,14 @@ Firebug.JSAutoCompleter = function(textBox, completionBox, options)
             for (var i = 0; i < candidates.length; ++i)
             {
                 // Mark a candidate as matching if it matches the prefix case-
-                // insensitively, and shares its upper-case characters.
+                // insensitively, and shares its upper-case characters. The
+                // exception to this is that for global completions, the first
+                // character must match exactly (see issue 6030).
                 var name = candidates[i];
                 if (!Str.hasPrefix(name.toLowerCase(), lowPrefix))
+                    continue;
+
+                if (mustMatchFirstLetter && name.charAt(0) !== prefix.charAt(0))
                     continue;
 
                 var fail = false;
@@ -299,11 +313,13 @@ Firebug.JSAutoCompleter = function(textBox, completionBox, options)
 
         // Special-case certain expressions.
         var special = {
-            "": ["document", "console", "frames", "window", "parseInt", "undefined"],
+            "": ["document", "console", "frames", "window", "parseInt", "undefined",
+                "Array", "Math", "Object", "String", "XMLHttpRequest", "Window"],
             "window.": ["console"],
             "location.": ["href"],
             "document.": ["getElementById", "addEventListener", "createElement",
-                "documentElement"]
+                "documentElement"],
+            "Object.prototype.toString": ["call"]
         };
         if (special.hasOwnProperty(this.completionBase.expr))
         {
@@ -677,11 +693,11 @@ Firebug.JSAutoCompleter = function(textBox, completionBox, options)
         this.selectedPopupElement = null;
 
         var vbox = this.completionPopup.ownerDocument.createElement("vbox");
-        this.completionPopup.appendChild(vbox);
         vbox.classList.add("fbCommandLineCompletions");
+        this.completionPopup.appendChild(vbox);
 
         var title = this.completionPopup.ownerDocument.
-            createElementNS("http://www.w3.org/1999/xhtml","div");
+            createElementNS("http://www.w3.org/1999/xhtml", "div");
         title.textContent = Locale.$STR("console.Use Arrow keys, Tab or Enter");
         title.classList.add("fbPopupTitle");
         vbox.appendChild(title);
@@ -733,25 +749,23 @@ Firebug.JSAutoCompleter = function(textBox, completionBox, options)
 
         for (var i = this.popupTop; i < this.popupBottom; i++)
         {
-            var completion = list[i];
             var prefixLen = this.completions.prefix.length;
+            var completion = list[i];
 
             var hbox = this.completionPopup.ownerDocument.
-                createElementNS("http://www.w3.org/1999/xhtml","div");
+                createElementNS("http://www.w3.org/1999/xhtml", "div");
             hbox.completionIndex = i;
 
             var pre = this.completionPopup.ownerDocument.
-                createElementNS("http://www.w3.org/1999/xhtml","span");
-            var preText = this.textBox.value;
-            if (prefixLen)
-                preText = preText.slice(0, -prefixLen) + completion.slice(0, prefixLen);
-            pre.innerHTML = Str.escapeForTextNode(preText);
+                createElementNS("http://www.w3.org/1999/xhtml", "span");
+            var preText = this.completionBase.expr + completion.substr(0, prefixLen);
+            pre.textContent = preText;
             pre.classList.add("userTypedText");
 
             var post = this.completionPopup.ownerDocument.
-                createElementNS("http://www.w3.org/1999/xhtml","span");
+                createElementNS("http://www.w3.org/1999/xhtml", "span");
             var postText = completion.substr(prefixLen);
-            post.innerHTML = Str.escapeForTextNode(postText);
+            post.textContent = postText;
             post.classList.add("completionText");
 
             if (i === selIndex)
@@ -765,7 +779,24 @@ Firebug.JSAutoCompleter = function(textBox, completionBox, options)
         if (this.selectedPopupElement)
             this.selectedPopupElement.setAttribute("selected", "true");
 
-        this.completionPopup.openPopup(this.textBox, "before_start", 0, 0, false, false);
+        // Open the popup at the pixel position of the start of the completed
+        // expression. The text length times the width of a single character,
+        // plus apparent padding, is a good enough approximation of this.
+        var chWidth = this.getCharWidth(this.completionBase.pre);
+        var offsetX = Math.round(this.completionBase.pre.length * chWidth) + 2;
+        this.completionPopup.openPopup(this.textBox, "before_start", offsetX, 0, false, false);
+    };
+
+    this.getCharWidth = function(text)
+    {
+        var size = Firebug.textSize;
+        if (!measureCache[size])
+        {
+            var measurer = this.options.popupMeasurer;
+            measurer.style.fontSizeAdjust = this.textBox.style.fontSizeAdjust;
+            measureCache[size] = measurer.offsetWidth / 60;
+        }
+        return measureCache[size];
     };
 
     this.isPopupOpen = function()
@@ -857,25 +888,6 @@ Firebug.JSAutoCompleter = function(textBox, completionBox, options)
         Events.addEventListener(this.completionPopup, "DOMMouseScroll", this.popupScroll, true);
         Events.addEventListener(this.completionPopup, "click", this.popupClick, true);
     }
-};
-
-// ********************************************************************************************* //
-
-/**
- * A dummy auto-completer, set as current by CommandLine.setAutoCompleter when
- * no completion is supposed to be done (such as in the large command line,
- * currently, or when there is no context).
- */
-Firebug.EmptyJSAutoCompleter = function()
-{
-    this.empty = true;
-    this.shutdown = function() {};
-    this.hide = function() {};
-    this.complete = function() {};
-    this.acceptReturn = function() { return true; };
-    this.revert = function() { return false; };
-    this.handleKeyDown = function() {};
-    this.handleKeyPress = function() {};
 };
 
 // ********************************************************************************************* //
@@ -1614,24 +1626,21 @@ function propertiesToHide(expr, obj)
             "strike", "small", "big", "blink", "sup", "sub");
     }
 
-    // Annoying when typing 'document'/'window'.
-    if (expr === "")
-    {
-        ret.push("Document", "DocumentType", "DocumentFragment",
-            "DocumentTouch", "DocumentXBL", "DOMTokenList",
-            "DOMConstructor", "DOMError", "DOMException",
-            "DOMImplementation", "DOMRequest", "DOMSettableTokenList",
-            "DOMStringMap", "DOMStringList", "Window", "WindowInternal",
-            "WindowCollection", "WindowUtils", "WindowPerformance");
-    }
-
     if (expr === "" || expr === "window.")
     {
         // Internal Firefox things.
         ret.push("getInterface", "Components", "XPCNativeWrapper",
-            "InstallTrigger", "netscape",
+            "InstallTrigger", "WindowInternal", "DocumentXBL",
             "startProfiling", "stopProfiling", "pauseProfilers",
-            "resumeProfilers", "dumpProfile");
+            "resumeProfilers", "dumpProfile", "netscape",
+            "BoxObject", "BarProp", "BrowserFeedWriter", "ChromeWindow",
+            "ElementCSSInlineStyle", "JSWindow", "NSEditableElement",
+            "NSRGBAColor", "NSEvent", "NSXPathExpression", "ToString",
+            "OpenWindowEventDetail", "Parser", "ParserJS", "Rect",
+            "RGBColor", "ROCSSPrimitiveValue", "RequestService",
+            "PaintRequest", "PaintRequestList", "WindowUtils",
+            "GlobalPropertyInitializer", "GlobalObjectConstructor"
+        );
 
         // Hide ourselves.
         ret.push("_FirebugCommandLine", "_firebug");
@@ -1687,11 +1696,12 @@ function setCompletionsFromObject(out, object, context)
             var hideMap = Object.create(null);
             for (var i = 0; i < hide.length; ++i)
                 hideMap[hide[i]] = 1;
+            var hideRegex = /^XUL[A-Za-z]+$/;
 
             var newCompletions = [];
             out.completions.forEach(function(prop)
             {
-                if (prop in hideMap)
+                if (prop in hideMap || hideRegex.test(prop))
                     out.hiddenCompletions.push(prop);
                 else
                     newCompletions.push(prop);
@@ -1715,7 +1725,14 @@ function propChainBuildComplete(out, context, tempExpr, result)
     var done = function(result)
     {
         if (result !== undefined && result !== null)
-            setCompletionsFromObject(out, Object(result), context);
+        {
+            if (typeof result !== "object" && typeof result !== "function")
+            {
+                // Convert the primitive into its scope's matching object type.
+                result = Wrapper.getContentView(out.window).Object(result);
+            }
+            setCompletionsFromObject(out, result, context);
+        }
     };
 
     if (tempExpr.fake)
@@ -1799,7 +1816,7 @@ function evalPropChainStep(step, tempExpr, evalChain, out, context)
                     tempExpr.thisCommand = "window";
                     tempExpr.command += "(" + link.origCont + ")";
                 }
-                else if (link.name === "")
+                else if (!link.name)
                 {
                     // We cannot know about functions without name; try the
                     // heuristic directly.
@@ -2025,7 +2042,8 @@ function autoCompleteEval(context, preExpr, spreExpr, includeCurrentScope)
     var out = {
         spreExpr: spreExpr,
         completions: [],
-        hiddenCompletions: []
+        hiddenCompletions: [],
+        window: context.baseWindow || context.window
     };
     var indexCompletion = false;
 
@@ -2070,7 +2088,7 @@ function autoCompleteEval(context, preExpr, spreExpr, includeCurrentScope)
         {
             // Complete variables from the local scope
 
-            var contentView = Wrapper.getContentView(context.baseWindow || context.window);
+            var contentView = Wrapper.getContentView(out.window);
             if (context.stopped && includeCurrentScope)
             {
                 out.completions = Firebug.Debugger.getCurrentFrameKeys(context);
