@@ -191,6 +191,11 @@ Firebug.TabContext.prototype =
         return Firebug.chrome;
     },
 
+    getCurrentGlobal: function()
+    {
+        return this.stoppedGlobal || this.baseWindow || this.window;
+    },
+
     destroy: function(state)
     {
         // All existing timeouts need to be cleared
@@ -238,7 +243,7 @@ Firebug.TabContext.prototype =
             FBTrace.sysout("tabContext.destroy " + this.getName() + " set state ", state);
     },
 
-    getPanel: function(panelName, noCreate)
+    getPanelType: function(panelName)
     {
         // Get "global" panelType, registered using Firebug.registerPanel
         var panelType = Firebug.getPanelType(panelName);
@@ -247,14 +252,20 @@ Firebug.TabContext.prototype =
         if (!panelType && this.panelTypeMap && this.panelTypeMap.hasOwnProperty(panelName))
             panelType = this.panelTypeMap[panelName];
 
+        if (panelType && !panelType.prototype)
+        {
+            FBTrace.sysout("tabContext.getPanel no prototype " + panelType, panelType);
+            return null;
+        }
+
+        return panelType || null;
+    },
+
+    getPanel: function(panelName, noCreate)
+    {
+        var panelType = this.getPanelType(panelName);
         if (!panelType)
             return null;
-
-        if (!panelType.prototype)
-        {
-            FBTrace.sysout("tabContext.getPanel no prototype "+panelType, panelType);
-            return;
-        }
 
         // Create instance of the panelType only if it's enabled.
         var enabled = panelType.prototype.isEnabled ? panelType.prototype.isEnabled() : true;
@@ -262,6 +273,14 @@ Firebug.TabContext.prototype =
             return this.getPanelByType(panelType, noCreate);
 
         return null;
+    },
+
+    isPanelEnabled: function(panelName)
+    {
+        var panelType = this.getPanelType(panelName);
+        if (!panelType)
+            return false;
+        return (!panelType.prototype.isEnabled || panelType.prototype.isEnabled());
     },
 
     getPanelByType: function(panelType, noCreate)
@@ -350,7 +369,7 @@ Firebug.TabContext.prototype =
         catch (exc)
         {
             if (FBTrace.DBG_ERRORS)
-                FBTrace.sysout("tabContext.destroy FAILS "+exc, exc);
+                FBTrace.sysout("tabContext.destroy FAILS (" + panelName + ") " + exc, exc);
 
             // the destroy failed, don't keep the bad state
             delete state.panelState[panelName];
@@ -510,7 +529,7 @@ Firebug.TabContext.prototype =
             }
 
             // Count how many messages have been logged during the throttle period
-            var logTime = new Date().getTime();
+            var logTime = Date.now();
             if (logTime - this.lastMessageTime < throttleTimeWindow)
                 ++this.throttleBuildup;
             else
@@ -522,7 +541,16 @@ Firebug.TabContext.prototype =
             // logged later on a timer, otherwise just execute it now
             if (!this.throttleQueue.length && this.throttleBuildup <= throttleMessageLimit)
             {
-                message.apply(object, args);
+                try
+                {
+                    message.apply(object, args);
+                }
+                catch (e)
+                {
+                    if (FBTrace.DBG_ERRORS)
+                        FBTrace.sysout("tabContext.throttle; EXCEPTION " + e, e);
+                }
+
                 return false;
             }
         }
@@ -551,7 +579,17 @@ Firebug.TabContext.prototype =
             max = queue.length;
 
         for (var i = 0; i < max; i += 3)
-            queue[i].apply(queue[i+1], queue[i+2]);
+        {
+            try
+            {
+                queue[i].apply(queue[i+1], queue[i+2]);
+            }
+            catch (e)
+            {
+                if (FBTrace.DBG_ERRORS)
+                    FBTrace.sysout("tabContext.flushThrottleQueue; EXCEPTION " + e, e);
+            }
+        }
 
         queue.splice(0, throttleFlushCount*3);
 

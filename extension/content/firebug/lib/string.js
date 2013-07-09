@@ -19,10 +19,9 @@ const entityConverter = Xpcom.CCSV("@mozilla.org/intl/entityconverter;1", "nsIEn
 
 const reNotWhitespace = /[^\s]/;
 
-
 var Str = {};
 
-// ************************************************************************************************
+// ********************************************************************************************* //
 // Whitespace and Entity conversions
 
 var entityConversionLists = Str.entityConversionLists =
@@ -110,8 +109,10 @@ e(0xfeff, "#65279", attr, text, white, editor); // ZERO WIDTH NO-BREAK SPACE
 e(0x200d, "zwj", attr, text, white, editor);
 e(0x200e, "lrm", attr, text, white, editor);
 e(0x200f, "rlm", attr, text, white, editor);
+e(0x202d, "#8237", attr, text, white, editor); // left-to-right override
+e(0x202e, "#8238", attr, text, white, editor); // right-to-left override
 
-//************************************************************************************************
+// ********************************************************************************************* //
 // Entity escaping
 
 var entityConversionRegexes =
@@ -186,7 +187,7 @@ function createSimpleEscape(name, direction)
                     return list[ch];
                 }
             );
-    }
+    };
 }
 
 function escapeEntityAsName(char)
@@ -356,13 +357,13 @@ function unescapeEntities(str, lists)
     return results.join('') || '';
 }
 
-// ************************************************************************************************
+// ********************************************************************************************* //
 // String escaping
 
 var escapeForTextNode = Str.escapeForTextNode = createSimpleEscape("text", "normal");
-var escapeForHtmlEditor = Str.escapeForHtmlEditor = createSimpleEscape("editor", "normal");
 var escapeForElementAttribute = Str.escapeForElementAttribute = createSimpleEscape("attributes", "normal");
-var escapeForCss = Str.escapeForCss = createSimpleEscape("css", "normal");
+Str.escapeForHtmlEditor = createSimpleEscape("editor", "normal");
+Str.escapeForCss = createSimpleEscape("css", "normal");
 
 // deprecated compatibility functions
 Str.deprecateEscapeHTML = createSimpleEscape("text", "normal");
@@ -546,6 +547,15 @@ Str.trimRight = function(text)
 
 Str.hasPrefix = function(hay, needle)
 {
+    // Passing empty string is ok, but null or undefined is not.
+    if (hay == null)
+    {
+        if (FBTrace.DBG_ERRORS)
+            FBTrace.sysout("Str.hasPrefix; string must not be null", {hay: hay, needle: needle});
+
+        return false;
+    }
+
     // This is the fastest way of testing for prefixes - (hay.indexOf(needle) === 0)
     // can be O(|hay|) in the worst case, and (hay.substr(0, needle.length) === needle)
     // unnecessarily creates a new string and might be O(|needle|) in some JavaScript
@@ -556,9 +566,9 @@ Str.hasPrefix = function(hay, needle)
 Str.endsWith = function(str, suffix)
 {
     return str.indexOf(suffix, str.length - suffix.length) !== -1;
-}
+};
 
-// ************************************************************************************************
+// ********************************************************************************************* //
 // HTML Wrap
 
 Str.wrapText = function(text, noEscapeHTML)
@@ -607,7 +617,7 @@ Str.insertWrappedText = function(text, textBox, noEscapeHTML)
     textBox.innerHTML = "<pre role=\"list\">" + html.join("") + "</pre>";
 };
 
-// ************************************************************************************************
+// ********************************************************************************************* //
 // Indent
 
 const reIndent = /^(\s+)/;
@@ -635,11 +645,47 @@ Str.cleanIndentation = function(text)
     return lines.join("");
 };
 
-// ************************************************************************************************
+// ********************************************************************************************* //
 // Formatting
 
 //deprecated compatibility functions
 Str.deprecateEscapeHTML = createSimpleEscape("text", "normal");
+
+/**
+ * Formats a number with a fixed number of decimal places considering the locale settings
+ * @param {Integer} number Number to format
+ * @param {Integer} decimals Number of decimal places
+ * @returns {String} Formatted number
+ */
+Str.toFixedLocaleString = function(number, decimals)
+{
+    // Check whether 'number' is a valid number
+    if (isNaN(parseFloat(number)))
+        throw new Error("Value '" + number + "' of the 'number' parameter is not a number");
+
+    // Check whether 'decimals' is a valid number
+    if (isNaN(parseFloat(decimals)))
+        throw new Error("Value '" + decimals + "' of the 'decimals' parameter is not a number");
+
+    var precision = Math.pow(10, decimals);
+    var formattedNumber = (Math.round(number * precision) / precision).toLocaleString();
+    var decimalMark = (0.1).toLocaleString().match(/\D/);
+    var decimalsCount = (formattedNumber.lastIndexOf(decimalMark) == -1) ? 0 : formattedNumber.length - formattedNumber.lastIndexOf(decimalMark) - 1;
+
+    // Append decimals if needed
+    if (decimalsCount < decimals)
+    {
+        // If the number doesn't have any decimals, add the decimal mark
+        if (decimalsCount == 0)
+            formattedNumber += decimalMark;
+
+        // Append additional decimals
+        for (var i=0, count = decimals - decimalsCount; i<count; ++i)
+            formattedNumber += "0";
+    }
+
+    return formattedNumber;
+};
 
 Str.formatNumber = Deprecated.deprecated("use <number>.toLocaleString() instead",
     function(number) { return number.toLocaleString(); });
@@ -667,37 +713,119 @@ Str.formatSize = function(bytes)
     if (sizePrecision == -1)
         result = bytes + " B";
 
-    var a = Math.pow(10, sizePrecision);
-
     if (bytes == -1 || bytes == undefined)
         return "?";
     else if (bytes == 0)
         return "0 B";
     else if (bytes < 1024)
         result = bytes.toLocaleString() + " B";
-    else if (bytes < (1024*1024))
-        result = (Math.round((bytes/1024)*a)/a).toLocaleString() + " KB";
+    else if (bytes < (1024 * 1024))
+        result = this.toFixedLocaleString(bytes / 1024, sizePrecision) + " KB";
     else
-        result = (Math.round((bytes/(1024*1024))*a)/a).toLocaleString() + " MB";
+        result = this.toFixedLocaleString(bytes / (1024 * 1024), sizePrecision) + " MB";
 
     return negative ? "-" + result : result;
 };
 
-Str.formatTime = function(elapsed)
+/**
+ * Returns a formatted time string
+ *
+ * Examples:
+ * Str.formatTime(12345678) => default formatting options => "3h 25m 45.678s"
+ * Str.formatTime(12345678, "ms") => use milliseconds as min. time unit => "3h 25m 45s 678ms"
+ * Str.formatTime(12345678, null, "m") => use minutes as max. time unit => "205m 45.678s"
+ * Str.formatTime(12345678, "m", "h") => use minutes as min. and hours as max. time unit
+ *     => "3h 25.7613m"
+ *
+ * @param {Integer} time Time to format in milliseconds
+ * @param {Integer} [minTimeUnit=1] Minimal time unit to use in the formatted string
+ *     (default is seconds)
+ * @param {Integer} [maxTimeUnit=4] Maximal time unit to use in the formatted string
+ *     (default is days)
+ * @returns {String} Formatted time string
+ */
+Str.formatTime = function(time, minTimeUnit, maxTimeUnit, decimalPlaces)
 {
-    if (elapsed == -1)
+    var time = parseInt(time);
+
+    if (isNaN(time))
         return "";
-    else if (elapsed == 0)
-        return "0";
-    else if (elapsed < 1000)
-        return elapsed + "ms";
-    else if (elapsed < 60000)
-        return (Math.round(elapsed/10) / 100) + "s";
+
+    var timeUnits = [
+        {
+            unit: "ms",
+            interval: 1000
+        },
+        {
+            unit: "s",
+            interval: 60
+        },
+        {
+            unit: "m",
+            interval: 60
+        },
+        {
+            unit: "h",
+            interval: 24
+        },
+        {
+            unit: "d",
+            interval: 1
+        },
+    ];
+
+    if (time == -1)
+    {
+        return "";
+    }
     else
     {
-        var min = Math.floor(elapsed/60000);
-        var sec = (elapsed % 60000);
-        return min + "m " + (Math.round((elapsed/1000)%60)) + "s";
+        // Get the index of the min. and max. time unit and the decimal places
+        var minTimeUnitIndex = (Math.abs(time) < 1000) ? 0 : 1;
+        var maxTimeUnitIndex = timeUnits.length - 1;
+
+        for (var i=0, len=timeUnits.length; i<len; ++i)
+        {
+            if (timeUnits[i].unit == minTimeUnit)
+                minTimeUnitIndex = i;
+            if (timeUnits[i].unit == maxTimeUnit)
+                maxTimeUnitIndex = i;
+        }
+
+        if (!decimalPlaces)
+            decimalPlaces = (Math.abs(time) >= 60000 && minTimeUnitIndex == 1 ? 0 : 2);
+
+        // Calculate the maximal time interval
+        var timeUnitInterval = 1;
+        for (var i=0; i<maxTimeUnitIndex; ++i)
+            timeUnitInterval *= timeUnits[i].interval;
+
+        var formattedString = (time < 0 ? "-" : "");
+        time = Math.abs(time);
+        for (var i=maxTimeUnitIndex; i>=minTimeUnitIndex; --i)
+        {
+            var value = time / timeUnitInterval;
+            if (i != minTimeUnitIndex)
+            {
+                if (value < 0)
+                    value = Math.ceil(value);
+                else
+                    value = Math.floor(value);
+            }
+            else
+            {
+                var decimalFactor = Math.pow(10, decimalPlaces);
+                value = Math.round(value * decimalFactor) / decimalFactor;
+            }
+
+            if (value != 0 || (i == minTimeUnitIndex && formattedString == ""))
+                formattedString += value.toLocaleString() + timeUnits[i].unit + " ";
+            time %= timeUnitInterval;
+            if (i != 0)
+                timeUnitInterval /= timeUnits[i - 1].interval;
+        }
+
+        return formattedString.trim();
     }
 };
 
@@ -781,15 +909,7 @@ Str.safeToString = function(ob)
     try
     {
         if (!ob)
-        {
-            if (ob == undefined)
-                return "undefined";
-            if (ob == null)
-                return "null";
-            if (ob == false)
-                return "false";
-            return "";
-        }
+            return ""+ob;
         if (ob && (typeof (ob["toString"]) == "function") )
             return ob.toString();
         if (ob && typeof (ob["toSource"]) == "function")

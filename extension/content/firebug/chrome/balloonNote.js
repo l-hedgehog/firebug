@@ -8,7 +8,7 @@ define(["firebug/lib/domplate"], function(Domplate) {
 Firebug.BalloonNote = function(doc, object)
 {
     this.initialize(doc, object);
-}
+};
 
 with (Domplate) {
 Firebug.BalloonNote.prototype = domplate(
@@ -22,7 +22,7 @@ Firebug.BalloonNote.prototype = domplate(
                 DIV({"class": "balloonInner2"},
                     DIV({"class": "balloonInner3"},
                         DIV({"class": "balloonInner4"},
-                            IMG({"class": "balloonCloseButton closeButton", src: "blank.gif",
+                            SPAN({"class": "balloonCloseButton closeButton",
                                 onclick: "$onCloseAction"}),
                             DIV({"class": "balloonContent"},
                                 TAG("$cause|getContentTag", {cause: "$cause"})
@@ -51,8 +51,9 @@ Firebug.BalloonNote.prototype = domplate(
     {
         // xxxHonza: TODO: this object should implement the whole show/hide logic
         // move from Firebug.BreakNotification
-    },
-})};
+    }
+});
+};
 
 // ********************************************************************************************* //
 });

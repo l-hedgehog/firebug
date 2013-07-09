@@ -6,50 +6,65 @@ function runTest()
     {
         FBTest.openFirebug();
 
+        var diskCache = FW.Firebug.getPref("browser.cache", "disk.enable");
+        var memoryCache = FW.Firebug.getPref("browser.cache", "memory.enable");
+        FBTest.progress("disk: " + diskCache + ", memory: " + memoryCache);
+
         // Enable browser cache
         var browserCache = FW.Firebug.NetMonitor.BrowserCache;
         var browserCacheEnabled = browserCache.isEnabled();
         browserCache.toggle(true);
-        
+
         FBTest.selectPanel("net");
         FBTest.enableNetPanel();
 
         var options =
         {
             tagName: "tr",
-            classes: "netRow category-undefined hasHeaders loaded",
+            classes: "netRow category-undefined hasHeaders loaded fromCache",
             counter: 2
         };
 
-        var callbackFunction = function(row)
+        FBTest.waitForDisplayedElement("net", options, function()
         {
-            var panelNode = FBTest.selectPanel("net").panelNode;
+            var panelNode = FBTest.getSelectedPanel().panelNode;
 
-            FBTest.click(row);
-            FBTest.expandElements(panelNode, "netInfoPostTab");
-
-            var cachedResponseHeadersTitle = FW.FBL.getElementByClass(panelNode,
-                "netInfoCachedResponseHeadersTitle");
-            if (FBTest.ok(cachedResponseHeadersTitle, "Cached response headers must exist"))
+            var options =
             {
-                var cachedResponseHeaders = cachedResponseHeadersTitle.nextSibling;
-                var cachedResponseHeadersBody = cachedResponseHeaders.
-                    getElementsByClassName("netInfoCachedResponseHeadersBody").item(0);
-                FBTest.ok(cachedResponseHeadersBody.children.length > 0,
-                    "There must be some cached response headers");
-                FBTest.compare(/Cache-Control/,
-                    cachedResponseHeaders.textContent,
-                    "Cached response headers must include 'Cache-Control' header");
-            }
+                tagName: "td",
+                classes: "netInfoParamName"
+            };
 
-            // Disable browser cache again if it was disabled before
-            if (!browserCacheEnabled)
-                browserCache.toggle(false);
+            FBTest.waitForDisplayedElement("net", options, function()
+            {
+                var rows = panelNode.querySelectorAll(
+                    ".netInfoRow.category-undefined.outerFocusRow");
 
-            FBTest.testDone("issue4905.DONE");
-        };
+                FBTest.compare(2, rows.length, "There must be two requests coming from the cache");
 
-        FBTest.waitForDisplayedElement("net", options, callbackFunction);
+                for (var i=0, len=rows.length; i<len; ++i)
+                {
+                    FBTest.expandElements(rows[i], "netInfoHeadersTab");
+
+                    var headersBody = FW.FBL.getElementByClass(rows[i],
+                        "netInfoCachedResponseHeadersBody");
+                    if (FBTest.ok(headersBody, "Cached response headers must exist"))
+                    {
+                        FBTest.compare(/Cache-Control\s*max-age=10, public/,
+                            headersBody.textContent, "'Cache-Control' header must exist");
+                    }
+                }
+
+                // Disable browser cache again if it was disabled before
+                if (!browserCacheEnabled)
+                    browserCache.toggle(false);
+
+                FBTest.testDone("issue4905.DONE");
+            });
+
+            FBTest.expandElements(panelNode, "netRow", "category-undefined",
+                "hasHeaders", "loaded", "fromCache");
+        });
 
         FBTest.reload();
     });

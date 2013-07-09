@@ -15,14 +15,17 @@ define([
     "firebug/lib/dom",
     "firebug/lib/css",
     "firebug/lib/xpath",
+    "firebug/lib/string",
     "firebug/lib/fonts",
     "firebug/lib/options",
     "firebug/css/cssModule",
     "firebug/css/cssPanel",
-    "firebug/chrome/menu"
+    "firebug/chrome/menu",
+    "firebug/css/loadHandler",
 ],
 function(Obj, Firebug, Firefox, Domplate, FirebugReps, Xpcom, Locale, Events, Url, Arr,
-    SourceLink, Dom, Css, Xpath, Fonts, Options, CSSModule, CSSStyleSheetPanel, Menu) {
+    SourceLink, Dom, Css, Xpath, Str, Fonts, Options, CSSModule, CSSStyleSheetPanel, Menu,
+    LoadHandler) {
 
 with (Domplate) {
 
@@ -33,27 +36,53 @@ const Cc = Components.classes;
 const Ci = Components.interfaces;
 const nsIDOMCSSStyleRule = Ci.nsIDOMCSSStyleRule;
 
-// before firefox 6 getCSSStyleRules accepted only one argument
-const DOMUTILS_SUPPORTS_PSEUDOELEMENTS = Dom.domUtils.getCSSStyleRules.length > 1;
-
 // See: http://mxr.mozilla.org/mozilla1.9.2/source/content/events/public/nsIEventStateManager.h#153
 const STATE_ACTIVE  = 0x01;
 const STATE_FOCUS   = 0x02;
 const STATE_HOVER   = 0x04;
 
 // ********************************************************************************************* //
-// CSS Elemenet Panel (HTML side panel)
+// CSSStylePanel Panel (HTML side panel)
 
+/**
+ * @panel Represents the Style side panel available within HTML panel. This panel is responsible
+ * for displaying CSS rules associated with the currently selected element in the HTML panel.
+ * See more: https://getfirebug.com/wiki/index.php/Style_Side_Panel
+ */
 function CSSStylePanel() {}
-
 CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
+/** @lends CSSStylePanel */
 {
+    name: "css",
+    parentPanel: "html",
+    order: 0,
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+    // Initialization
+
+    initialize: function()
+    {
+        this.onStateChange = Obj.bindFixed(this.contentStateCheck, this);
+        this.onHoverChange = Obj.bindFixed(this.contentStateCheck, this, STATE_HOVER);
+        this.onActiveChange = Obj.bindFixed(this.contentStateCheck, this, STATE_ACTIVE);
+
+        CSSStyleSheetPanel.prototype.initialize.apply(this, arguments);
+
+        // Destroy derived updater for now.
+        // xxxHonza: the Style panel could use it too?
+        this.updater.destroy();
+        this.updater = null;
+    },
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+    // Domplate
+
     template: domplate(
     {
         cascadedTag:
             DIV({"class": "a11yCSSView", role: "presentation"},
                 DIV({"class": "cssNonInherited", role: "list",
-                        "aria-label": Locale.$STR("aria.labels.style rules") },
+                        "aria-label": Locale.$STR("a11y.labels.style rules") },
                     FOR("rule", "$rules",
                         TAG("$ruleTag", {rule: "$rule"})
                     )
@@ -85,12 +114,10 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
             ),
 
         CSSFontPropValueTag:
-            SPAN({"class": "cssFontPropValue"},
                 FOR("part", "$propValueParts",
-                    SPAN({"class": "$part.type|getClass", _repObject: "$part.font"}, "$part.value"),
+                    SPAN({"class": "$part.type|getClass", _repObject: "$part"}, "$part.value"),
                     SPAN({"class": "cssFontPropSeparator"}, "$part|getSeparator")
-                )
-            ),
+                ),
 
         getSeparator: function(part)
         {
@@ -120,7 +147,6 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
     }),
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-    // All calls to this method must call cleanupSheets first
 
     updateCascadeView: function(element)
     {
@@ -165,6 +191,8 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
                     var propValue = propValueElem.textContent;
                     var fontPropValueParts = getFontPropValueParts(element, propValue, propName);
 
+                    Css.setClass(propValueElem, "cssFontPropValue");
+
                     // xxxsz: Web fonts not being loaded at display time
                     // won't be marked as used. See issue 5420.
                     this.template.CSSFontPropValueTag.replace({propValueParts: fontPropValueParts},
@@ -200,7 +228,6 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-    // All calls to this method must call cleanupSheets first
     getInheritedRules: function(element, sections, usedProps)
     {
         var parent = element.parentNode;
@@ -216,16 +243,33 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
         }
     },
 
-    // All calls to this method must call cleanupSheets first
     getElementRules: function(element, rules, usedProps, inheritMode)
     {
+        function filterMozPseudoElements(pseudoElement)
+        {
+            return !Str.hasPrefix(pseudoElement, "::-moz") ||
+                pseudoElement == "::-moz-placeholder" ||
+                pseudoElement == "::-moz-selection";;
+        }
+
         var pseudoElements = [""];
         var inspectedRules, displayedRules = {};
 
         // Firefox 6+ allows inspecting of pseudo-elements (see issue 537)
-        if (DOMUTILS_SUPPORTS_PSEUDOELEMENTS && !inheritMode)
-            pseudoElements = Arr.extendArray(pseudoElements,
-                [":first-letter", ":first-line", ":before", ":after"]);
+        if (!inheritMode)
+            pseudoElements = Arr.extendArray(pseudoElements, Css.pseudoElements);
+
+        // xxxsz: Do not show Mozilla-specific pseudo-elements for now (see issue 6451)
+        // Pseudo-element rules just apply to specific elements, so we need a way to find out
+        // which elements that are
+        pseudoElements = pseudoElements.filter(filterMozPseudoElements);
+
+        // The domUtils API requires the pseudo-element selectors to be prefixed by only one colon 
+        pseudoElements.forEach(function(pseudoElement, i)
+        {
+            if (Str.hasPrefix(pseudoElement, "::"))
+                pseudoElements[i] = pseudoElement.substr(1);
+        });
 
         for (var p in pseudoElements)
         {
@@ -305,7 +349,10 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
             if (!dummyStyle)
             {
                 if (FBTrace.DBG_ERRORS)
-                    FBTrace.sysout("css.markOverridenProps; ERROR dummyStyle is NULL");
+                {
+                    FBTrace.sysout("css.markOverridenProps; ERROR dummyStyle is NULL for clone " +
+                        "of " + element, dummyElement);
+                }
                 return;
             }
 
@@ -461,19 +508,6 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
     // extends Panel
 
-    name: "css",
-    parentPanel: "html",
-    order: 0,
-
-    initialize: function()
-    {
-        this.onStateChange = Obj.bindFixed(this.contentStateCheck, this);
-        this.onHoverChange = Obj.bindFixed(this.contentStateCheck, this, STATE_HOVER);
-        this.onActiveChange = Obj.bindFixed(this.contentStateCheck, this, STATE_ACTIVE);
-
-        CSSStyleSheetPanel.prototype.initialize.apply(this, arguments);
-    },
-
     show: function(state)
     {
         if (this.selection)
@@ -508,17 +542,13 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
 
     updateView: function(element)
     {
-        var result = CSSModule.cleanupSheets(element.ownerDocument, Firebug.currentContext);
+        // We can properly update the view only if the page is fully loaded (see issue 5654).
+        var loadHandler = new LoadHandler();
+        loadHandler.handle(this.context, Obj.bindFixed(this.doUpdateView, this, element));
+    },
 
-        // If cleanupSheets returns false there was an exception thrown when accessing
-        // a styleshet (probably since it isn't fully loaded yet). So, delay the panel
-        // update and try it again a bit later (issue 5654).
-        if (!result)
-        {
-            this.context.setTimeout(Obj.bindFixed(this.updateView, this, element), 200);
-            return;
-        }
-
+    doUpdateView: function(element)
+    {
         // All stylesheets should be ready now, update the view.
         this.updateCascadeView(element);
 
@@ -645,7 +675,7 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
             command: Obj.bindFixed(this.addRelatedRule, this)
         });
 
-        if (style instanceof Ci.nsIDOMFontFace && style.rule)
+        if (style.font && style.font.rule)
         {
             items.push(
                 "-",
@@ -653,7 +683,7 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
                     label: "css.label.Inspect_Declaration",
                     tooltiptext: "css.tip.Inspect_Declaration",
                     id: "fbInspectDeclaration",
-                    command: Obj.bindFixed(this.inspectDeclaration, this, style.rule)
+                    command: Obj.bindFixed(this.inspectDeclaration, this, style.font.rule)
                 }
             );
         }
@@ -876,9 +906,13 @@ function getFontPropValueParts(element, value, propName)
     var child = element.firstChild;
     do
     {
+        if (!child)
+            break;
+
         if (child.nodeType == Node.TEXT_NODE)
             usedFonts = Arr.extendArray(usedFonts, Fonts.getFonts(child));
-    } while (child = child.nextSibling);
+    }
+    while (child = child.nextSibling);
 
     var genericFontUsed = false;
     for (var i = 0; i < fonts.length; ++i)

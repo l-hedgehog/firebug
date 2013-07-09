@@ -181,7 +181,7 @@ Breakpoint.prototype =
                 FBTrace.sysout("dom.unwatch; object FAILS " + exc, exc);
         }
     }
-}
+};
 
 // ********************************************************************************************* //
 
@@ -196,7 +196,7 @@ var BreakpointRep = domplate(Firebug.Rep,
                 INPUT({"class": "breakpointCheckbox", type: "checkbox",
                     _checked: "$bp.checked", tabindex: "-1", onclick: "$onEnable"}),
                 SPAN({"class": "breakpointName"}, "$bp.propName"),
-                IMG({"class": "closeButton", src: "blank.gif", onclick: "$onRemove"})
+                SPAN({"class": "closeButton", onclick: "$onRemove"})
             ),
             DIV({"class": "breakpointCode"},
                 TAG("$bp.object|getObjectTag", {object: "$bp.object"})

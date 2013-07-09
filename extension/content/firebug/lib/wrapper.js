@@ -5,10 +5,7 @@ define([], function() {
 // ********************************************************************************************* //
 // Constants
 
-var Ci = Components.interfaces;
-var Cc = Components.classes;
 var Cu = Components.utils;
-
 var Wrapper = {};
 
 // ********************************************************************************************* //
@@ -16,23 +13,32 @@ var Wrapper = {};
 
 Wrapper.getContentView = function(object)
 {
-    if (typeof(object) === "undefined" || object == null)
-        return false;
+    if (isPrimitive(object))
+        return object;
 
-    return (object.wrappedJSObject);
-}
+    return object.wrappedJSObject;
+};
 
 Wrapper.unwrapObject = function(object)
 {
-    // TODO: We might be able to make this check more authoritative with QueryInterface.
-    if (typeof(object) === 'undefined' || object == null)
+    if (isPrimitive(object))
         return object;
 
-    if (object.wrappedJSObject)
-        return object.wrappedJSObject;
+    return XPCNativeWrapper.unwrap(object);
+};
 
-    return object;
-}
+Wrapper.wrapObject = function(object)
+{
+    if (isPrimitive(object))
+        return object;
+
+    return XPCNativeWrapper(object);
+};
+
+Wrapper.isDeadWrapper = function(wrapper)
+{
+    return Cu.isDeadWrapper(wrapper);
+};
 
 Wrapper.unwrapIValue = function(object, viewChrome)
 {
@@ -65,7 +71,7 @@ Wrapper.unwrapIValue = function(object, viewChrome)
     }
 
     return unwrapped;
-}
+};
 
 Wrapper.unwrapIValueObject = function(scope, viewChrome)
 {
@@ -92,16 +98,33 @@ Wrapper.unwrapIValueObject = function(scope, viewChrome)
     return scopeVars;
 };
 
+/**
+ * Create a content-accessible view of a simple chrome object. All properties
+ * are marked as non-writable, except if they have explicit getters/setters.
+ */
+Wrapper.cloneIntoContentScope = function(global, obj)
+{
+    var newObj = Cu.createObjectIn(global);
+    for (var prop in obj)
+    {
+        var desc = Object.getOwnPropertyDescriptor(obj, prop);
+        if (!desc)
+            continue;
+        if ("writable" in desc)
+            desc.writable = false;
+        desc.configurable = false;
+        Object.defineProperty(newObj, prop, desc);
+    }
+    Cu.makeObjectPropsNormal(newObj);
+    return newObj;
+};
+
 // ********************************************************************************************* //
 
 Wrapper.ignoreVars =
 {
-    "__firebug__": 1,
-    "eval": 1,
-
     // We are forced to ignore Java-related variables, because
     // trying to access them causes browser freeze
-    "java": 1,
     "sun": 1,
     "Packages": 1,
     "JavaArray": 1,
@@ -109,17 +132,23 @@ Wrapper.ignoreVars =
     "JavaObject": 1,
     "JavaClass": 1,
     "JavaPackage": 1,
+
     // internal firebug things XXXjjb todo we should privatize these
     "_firebug": 1,
-    "_createFirebugConsole": 1,
+    "_firebugUnwrappedDebuggerObject": 1,
+    "__fb_scopedVars": 1,
     "_FirebugCommandLine": 1,
-    "loadFirebugConsole": 1,
 };
 
 Wrapper.shouldIgnore = function(name)
 {
     return (Wrapper.ignoreVars[name] === 1);
 };
+
+function isPrimitive(obj)
+{
+    return !(obj && (typeof obj === "object" || typeof obj === "function"));
+}
 
 // ********************************************************************************************* //
 

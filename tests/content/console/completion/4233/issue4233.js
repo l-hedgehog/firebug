@@ -18,8 +18,9 @@ function runTest()
                 cmdLine.focus();
                 cmdLine.value = expr.slice(0, -1);
                 FBTest.synthesizeKey(expr.slice(-1), null, win);
+                FBTest.synthesizeKey("VK_TAB", null, win);
 
-                var hasCompletion = (completionBox.value.length > expr.length);
+                var hasCompletion = (completionBox.value.length <= expr.length);
                 FBTest.compare(shouldComplete, hasCompletion,
                     "Completions should " + (shouldComplete ? "" : "not ") +
                     "appear for: " + expr);
@@ -81,8 +82,10 @@ function runTest()
                 ["id.get+(i", true],
 
                 ["date().g", true],
-                ["mk4().c", true],
-                ["mk4().chain().c", true],
+                ["make1().c", true],
+                ["make1().chain().c", true],
+                ["make2().c", true],
+                ["make2().chain().c", true],
                 ["getterSeemingEval('window').i", true],
                 ["getterSeemingEval('[window]')[0].i", true],
                 ["id(eval('window')).i", false],
@@ -90,7 +93,12 @@ function runTest()
                 ["new Date().g", true],
 
                 ["anArray.0", false],
+                ["anArray[\"0", true],
                 ["htmlCollection.0", false],
+                ["objWithNumericProps.0", true],
+
+                ["largeArray.leng", true],
+                ["largeArray.j", true],
 
                 // currently not handled
                 ["(window).i", false],

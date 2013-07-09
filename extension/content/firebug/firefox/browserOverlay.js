@@ -5,12 +5,13 @@ define([
     "firebug/lib/options",
     "firebug/lib/locale",
     "firebug/lib/array",
+    "firebug/lib/xpcom",
     "firebug/firefox/browserOverlayLib",
     "firebug/firefox/browserCommands",
     "firebug/firefox/browserMenu",
     "firebug/firefox/browserToolbar",
 ],
-function(FBTrace, Options, Locale, Arr, BrowserOverlayLib, BrowserCommands, BrowserMenu,
+function(FBTrace, Options, Locale, Arr, Xpcom, BrowserOverlayLib, BrowserCommands, BrowserMenu,
     BrowserToolbar) {
 
 with (BrowserOverlayLib) {
@@ -24,6 +25,7 @@ var Cu = Components.utils;
 
 Locale.registerStringBundle("chrome://firebug/locale/firebug.properties");
 Locale.registerStringBundle("chrome://firebug/locale/cookies.properties");
+Locale.registerStringBundle("chrome://firebug/locale/selectors.properties");
 
 Cu.import("resource://firebug/loader.js");
 Cu.import("resource://firebug/fbtrace.js");
@@ -108,7 +110,7 @@ BrowserOverlay.prototype =
     // Load Rest of Firebug
 
     /**
-     * This method is called by the Fremework to load entire Firebug. It's executed when
+     * This method is called by the Framework to load entire Firebug. It's executed when
      * the user requires Firebug for the first time.
      *
      * @param {Object} callback Executed when Firebug is fully loaded
@@ -133,7 +135,7 @@ BrowserOverlay.prototype =
         var scriptSources = [
             "chrome://firebug/content/legacy.js",
             "chrome://firebug/content/moduleConfig.js"
-        ]
+        ];
 
         // Create script elements.
         var self = this;
@@ -182,7 +184,7 @@ BrowserOverlay.prototype =
                 {
                     var checked = Options.get(option);
 
-                    // xxxHonza: I belive that allPagesActivation could be simple boolean option.
+                    // xxxHonza: I believe that allPagesActivation could be simple boolean option.
                     if (option == "allPagesActivation")
                         checked = (checked == "on") ? true : false;
 
@@ -290,6 +292,23 @@ BrowserOverlay.prototype =
         });
     },
 
+    onViewMenuShowing: function()
+    {
+        var suspendMarker = this.win.document.getElementById("firebugStatus");
+
+        // Check whether Firebug is open
+        var open = false;
+        if (this.win.Firebug.chrome)
+        {
+            var fbContentBox = this.win.Firebug.chrome.$("fbContentBox");
+            open = fbContentBox.getAttribute("collapsed") == "true" ? false : true;
+        }
+
+        var firebugViewMenuItem = this.win.document.
+            getElementById("menu_firebug_viewToggleFirebug");
+        firebugViewMenuItem.setAttribute("checked", open);
+    },
+
     onPositionPopupShowing: function(popup)
     {
         while (popup.lastChild)
@@ -301,9 +320,13 @@ BrowserOverlay.prototype =
 
         var items = [];
         var currPos = Options.get("framePosition");
-        for each (var pos in ["detached", "top", "bottom", "left", "right"])
+
+        var positions = ["detached", "top", "bottom", "left", "right"];
+        for (var i=0; i<positions.length; i++)
         {
+            var pos = positions[i];
             var label = pos.charAt(0).toUpperCase() + pos.slice(1);
+
             var item = $menuitem(this.doc, {
                 label: Locale.$STR("firebug.menu." + label),
                 tooltiptext: Locale.$STR("firebug.menu.tip." + label),
@@ -398,7 +421,6 @@ BrowserOverlay.prototype =
         // https://bugzilla.mozilla.org/show_bug.cgi?id=433168
         if (typeof(contextMenu.prototype.isTargetAFormControl) != "undefined")
         {
-            // https://bugzilla.mozilla.org/show_bug.cgi?id=433168
             var setTargetOriginal = this.setTargetOriginal = contextMenu.prototype.setTarget;
             contextMenu.prototype.setTarget = function(aNode, aRangeParent, aRangeOffset)
             {
@@ -424,7 +446,7 @@ BrowserOverlay.prototype =
                 this.showItem("inspect-separator", false);
                 this.showItem("context-inspect", false);
             }
-        }
+        };
     },
 
     unloadContextMenuOverlay: function()
@@ -433,8 +455,11 @@ BrowserOverlay.prototype =
         if (typeof(contextMenu) == "undefined")
             return;
 
-        contextMenu.prototype.setTarget = this.setTargetOriginal;
-        contextMenu.prototype.initItems = this.initItemsOriginal;
+        if (this.setTargetOriginal)
+            contextMenu.prototype.setTarget = this.setTargetOriginal;
+
+        if (this.initItemsOriginal)
+            contextMenu.prototype.initItems = this.initItemsOriginal;
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -473,7 +498,7 @@ BrowserOverlay.prototype =
 
                 this.win.addEventListener("unload", function()
                 {
-                    clearTimeout(timeout);
+                    self.win.clearTimeout(timeout);
                 }, false);
             }
         }
@@ -502,6 +527,7 @@ BrowserOverlay.prototype =
         }, 400);
     },
 
+    // xxxsz: Can't System.checkFirebugVersion() be used for that?
     checkFirebugVersion: function(currentVersion)
     {
         if (!currentVersion)
@@ -509,13 +535,13 @@ BrowserOverlay.prototype =
 
         var version = this.getVersion();
 
-        // Use Firefox comparator service.
-        var versionChecker = Cc["@mozilla.org/xpcom/version-comparator;1"].
-            getService(Ci.nsIVersionComparator);
+        // Use Firefox comparator service
+        var versionChecker = Xpcom.CCSV("@mozilla.org/xpcom/version-comparator;1",
+            "nsIVersionComparator");
 
         return versionChecker.compare(version, currentVersion);
     }
-}
+};
 
 // ********************************************************************************************* //
 // Registration

@@ -19,6 +19,7 @@ function(Obj, Firebug, Domplate, Locale, Events, Css, Dom, Str, Arr, Menu, Debug
 // Constants
 
 const saveTimeout = 400;
+const hugeChangeAmount = 100;
 const largeChangeAmount = 10;
 const smallChangeAmount = 0.1;
 
@@ -377,7 +378,9 @@ Firebug.Editor = Obj.extend(Firebug.Module,
                 chrome.keyCodeListen("UP", Events.isControl, Obj.bindFixed(editor.completeValue, editor, -smallChangeAmount)),
                 chrome.keyCodeListen("DOWN", Events.isControl, Obj.bindFixed(editor.completeValue, editor, smallChangeAmount)),
                 chrome.keyCodeListen("PAGE_UP", null, Obj.bindFixed(editor.completeValue, editor, -largeChangeAmount)),
-                chrome.keyCodeListen("PAGE_DOWN", null, Obj.bindFixed(editor.completeValue, editor, largeChangeAmount))
+                chrome.keyCodeListen("PAGE_DOWN", null, Obj.bindFixed(editor.completeValue, editor, largeChangeAmount)),
+                chrome.keyCodeListen("PAGE_UP", Events.isShift, Obj.bindFixed(editor.completeValue, editor, -hugeChangeAmount)),
+                chrome.keyCodeListen("PAGE_DOWN", Events.isShift, Obj.bindFixed(editor.completeValue, editor, hugeChangeAmount))
             );
         }
 
@@ -415,7 +418,9 @@ Firebug.Editor = Obj.extend(Firebug.Module,
                     chrome.keyCodeListen("UP", Events.isControl, Obj.bindFixed(editor.completeValue, editor, -smallChangeAmount)),
                     chrome.keyCodeListen("DOWN", Events.isControl, Obj.bindFixed(editor.completeValue, editor, smallChangeAmount)),
                     chrome.keyCodeListen("PAGE_UP", null, Obj.bindFixed(editor.completeValue, editor, -largeChangeAmount)),
-                    chrome.keyCodeListen("PAGE_DOWN", null, Obj.bindFixed(editor.completeValue, editor, largeChangeAmount))
+                    chrome.keyCodeListen("PAGE_DOWN", null, Obj.bindFixed(editor.completeValue, editor, largeChangeAmount)),
+                    chrome.keyCodeListen("PAGE_UP", Events.isShift, Obj.bindFixed(editor.completeValue, editor, -hugeChangeAmount)),
+                    chrome.keyCodeListen("PAGE_DOWN", Events.isShift, Obj.bindFixed(editor.completeValue, editor, hugeChangeAmount))
                 );
             }
         }
@@ -669,7 +674,7 @@ Firebug.InlineEditor.prototype = domplate(Firebug.BaseEditor,
 
         panel.panelNode.appendChild(this.box);
         this.input.select();
-        if (selectionData) //transfer selection to input element
+        if (selectionData) // transfer selection to input element
             this.setSelection(selectionData);
 
         // Insert the "expander" to cover the target element with white space
@@ -1032,8 +1037,8 @@ Firebug.InlineEditor.prototype = domplate(Firebug.BaseEditor,
 
             if(this.wrapped)
             {
-                var fixupL = clR[1].left - this.targetOffset.x,
-                    fixupT = clR[1].top - this.targetOffset.y;
+                var fixupL = clR[1].left - clR[0].left;
+                    fixupT = clR[1].top - clR[0].top;
             }
             else
             {
@@ -1070,7 +1075,8 @@ Firebug.InlineEditor.prototype = domplate(Firebug.BaseEditor,
         if (forceAll)
             Dom.scrollIntoCenterView(this.box, null, true);
     }
-})};
+});
+};
 
 // ********************************************************************************************* //
 // Autocompletion
