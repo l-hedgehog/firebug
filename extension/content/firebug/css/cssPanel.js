@@ -29,7 +29,8 @@ define([
     "firebug/lib/wrapper",
     "firebug/editor/editor",
     "firebug/editor/editorSelector",
-    "firebug/chrome/searchBox"
+    "firebug/chrome/searchBox",
+    "firebug/css/cssPanelMutationObserver",
 ],
 function(Obj, Firebug, Domplate, FirebugReps, Locale, Events, Url, SourceLink, Css, Dom, Win,
     Search, Str, Arr, Fonts, Xml, Persist, System, Menu, Options, CSSModule, CSSInfoTip,
@@ -456,6 +457,12 @@ Firebug.CSSStyleSheetPanel.prototype = Obj.extend(Firebug.Panel,
             if (state && state.scrollTop)
                 this.panelNode.scrollTop = state.scrollTop;
         }
+
+        // Solves the problem when the current stylesheet (i.e. the current panel location)
+        // has been removed from the page (or the parent window/iframe has been removed).
+        // In such case we need to update the panel content.
+        if (!this.isValidStyleSheet(this.location))
+            this.navigate(null);
     },
 
     hide: function()
@@ -464,26 +471,44 @@ Firebug.CSSStyleSheetPanel.prototype = Obj.extend(Firebug.Panel,
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+    isValidStyleSheet: function(styleSheet)
+    {
+        if (!styleSheet)
+            return false;
+
+        if (Wrapper.isDeadWrapper(styleSheet))
+            return false;
+
+        if (!styleSheet.ownerNode)
+            return false;
+
+        return true;
+    },
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
     // TabWatcher
 
     unwatchWindow: function(context, win)
     {
-        // We need to check whether the current location (a stylesheet) has been
-        // unloaded together with the window. It must be done asynchronously since
-        // the object not marked as dead immediatelly.
-        // xxxHonza: using random timeout is hacky, is there any better approach?
-        context.setTimeout(this.unwatchWindowDelayed.bind(this), 200);
-    },
+        // The update happens only if the CSS panel is selected. If the current location
+        // style sheet is removed while the panel is not selected, the content will be
+        // updated when 'show' method is executed by the framework.
+        var panel = Firebug.chrome.getSelectedPanel();
+        if (!panel || panel.name != "stylesheet")
+            return;
 
-    unwatchWindowDelayed: function(context, win)
-    {
-        // Check the current location. If the stylesheet comes from unloaded
-        // window it would be dead object by now. If yes, we need to update the
-        // current location.
-        if (Wrapper.isDeadWrapper(this.location))
+        // We need to check whether the current location (a stylesheet) has been
+        // unloaded together with the window.
+        if (this.location)
         {
-            this.location = null;
-            this.updateDefaultLocation();
+            var ownerNode = this.location.ownerNode;
+            var styleSheetDoc = ownerNode ? ownerNode.ownerDocument : null;
+            if (styleSheetDoc == win.document)
+            {
+                this.location = null;
+                this.updateDefaultLocation();
+            }
         }
     },
 
@@ -1326,7 +1351,11 @@ Firebug.CSSStyleSheetPanel.prototype = Obj.extend(Firebug.Panel,
                 warning, Obj.bind(this.insertRule, this));
         }
 
-        this.showToolbarButtons("fbCSSButtons", !Url.isSystemStyleSheet(this.location));
+        // Show CSS buttons only if there is a stylesheet and it isn't a system stylesheet.
+        // Displaying panel's buttons must happens only if the panel is actually visible
+        // otherwise the button could appear on another panel's toolbar.
+        var showButtons = this.location && !Url.isSystemStyleSheet(this.location);
+        this.showToolbarButtons("fbCSSButtons", showButtons);
 
         Events.dispatch(this.fbListeners, "onCSSRulesAdded", [this, this.panelNode]);
 

@@ -64,7 +64,7 @@ var NetRequestEntry = Firebug.NetMonitor.NetRequestEntry;
  */
 function NetPanel() {}
 NetPanel.prototype = Obj.extend(Firebug.ActivablePanel,
-/** lends NetPanel */
+/** @lends NetPanel */
 {
     name: panelName,
     searchable: true,
@@ -394,6 +394,15 @@ NetPanel.prototype = Obj.extend(Firebug.ActivablePanel,
         }
 
         items.push(
+            {
+                id: "fbCopyAsCurl",
+                label: "CopyAsCurl",
+                tooltiptext: "net.tip.Copy_as_cURL",
+                command: Obj.bindFixed(this.copyAsCurl, this, file)
+            }
+        );
+
+        items.push(
             "-",
             {
                 label: "OpenInTab",
@@ -413,10 +422,11 @@ NetPanel.prototype = Obj.extend(Firebug.ActivablePanel,
             );
         }
 
+        items.push("-");
+
         if (!file.loaded)
         {
             items.push(
-                "-",
                 {
                     label: "StopLoading",
                     tooltiptext: "net.tip.Stop_Loading",
@@ -424,6 +434,15 @@ NetPanel.prototype = Obj.extend(Firebug.ActivablePanel,
                 }
             );
         }
+
+        items.push(
+            {
+                label: "net.label.Resend",
+                tooltiptext: "net.tip.Resend",
+                id: "fbNetResend",
+                command: Obj.bindFixed(Firebug.Spy.XHR.resend, Firebug.Spy.XHR, file, this.context)
+            }
+        );
 
         if (object)
         {
@@ -461,16 +480,6 @@ NetPanel.prototype = Obj.extend(Firebug.ActivablePanel,
                 );
             }
         }
-
-        items.push("-");
-        items.push(
-            {
-                label: "net.label.Resend",
-                tooltiptext: "net.tip.Resend",
-                id: "fbNetResend",
-                command: Obj.bindFixed(Firebug.Spy.XHR.resend, Firebug.Spy.XHR, file, this.context)
-            }
-        );
 
         return items;
     },
@@ -521,6 +530,12 @@ NetPanel.prototype = Obj.extend(Firebug.ActivablePanel,
     {
         // Copy response to the clipboard
         System.copyToClipboard(NetUtils.getResponseText(file, this.context));
+    },
+
+    copyAsCurl: function(file)
+    {
+        System.copyToClipboard(NetUtils.generateCurlCommand(file,
+            Options.get("net.curlAddCompressedArgument")));
     },
 
     openRequestInTab: function(file)

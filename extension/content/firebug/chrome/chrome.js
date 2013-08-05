@@ -310,7 +310,9 @@ var FirebugChrome =
     {
         try
         {
-            return (wm.getMostRecentWindow(null).location.href.indexOf("firebug.xul") > 0);
+            // If the ID of the active element is related to Firebug, it must have the focus
+            var windowID = wm.getMostRecentWindow(null).document.activeElement.id;
+            return ["firebug", "fbMainContainer"].indexOf(windowID) !== -1;
         }
         catch(ex)
         {
@@ -370,7 +372,7 @@ var FirebugChrome =
         // Command Line Popup can be displayed for all the other panels
         // (except for the Console panel)
         // XXXjjb, xxxHonza, xxxsz: this should be somehow better, more generic and extensible,
-        // e.g. by asking each panel if it supports the Command Line Popup 
+        // e.g. by asking each panel if it supports the Command Line Popup
         var consolePanelType = Firebug.getPanelType("console");
         if (consolePanelType == panelType)
         {
@@ -1903,13 +1905,32 @@ function onBlur(event)
 
 function onSelectLocation(event)
 {
-    var locationList = FirebugChrome.getElementById("fbLocationList");
-    var location = locationList.repObject;
+    try
+    {
+        var locationList = FirebugChrome.getElementById("fbLocationList");
+        var location = locationList.repObject;
 
-    FirebugChrome.navigate(location);
+        FirebugChrome.navigate(location);
+    }
+    catch (err)
+    {
+        FBTrace.sysout("chrome.onSelectLocation; EXCEPTION " + err, err);
+    }
 }
 
 function onSelectingPanel(event)
+{
+    try
+    {
+        doSelectingPanel(event);
+    }
+    catch (err)
+    {
+        FBTrace.sysout("chrome.onSelectingPanel; EXCEPTION " + err, err);
+    }
+}
+
+function doSelectingPanel(event)
 {
     var panel = panelBar1.selectedPanel;
     var panelName = panel ? panel.name : null;
@@ -2091,7 +2112,7 @@ function onPanelMouseUp(event)
     {
         var selection = event.target.ownerDocument.defaultView.getSelection();
         var target = selection.focusNode || event.target;
-        
+
         if (Dom.getAncestorByClass(selection.focusNode, "editable") ===
             Dom.getAncestorByClass(selection.anchorNode, "editable"))
         {
@@ -2203,7 +2224,7 @@ function fatalError(summary, exc)
 }
 
 return FirebugChrome;
- 
+
 }  // end of createFirebugChrome(win)
 }; // end of var ChromeFactory object
 

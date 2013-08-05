@@ -1418,7 +1418,7 @@ FirebugReps.Element = domplate(Firebug.Rep,
                         label: "html.menu.Paste_Replace_Content",
                         tooltiptext: "html.tip.Paste_Replace_Content",
                         id: "fbPasteReplaceInner",
-                        command: Obj.bindFixed(this.paste, this, elt, clipboardContent, 
+                        command: Obj.bindFixed(this.paste, this, elt, clipboardContent,
                             "replaceInner")
                     },
                     {
@@ -1426,7 +1426,7 @@ FirebugReps.Element = domplate(Firebug.Rep,
                         tooltiptext: "html.tip.Paste_Replace_Node",
                         id: "fbPasteReplaceOuter",
                         disabled: isEltRoot,
-                        command: Obj.bindFixed(this.paste, this, elt, clipboardContent, 
+                        command: Obj.bindFixed(this.paste, this, elt, clipboardContent,
                             "replaceOuter")
                     },
                     {
@@ -1708,7 +1708,7 @@ FirebugReps.StyleSheet = domplate(Firebug.Rep,
     }
 });
 
-//********************************************************************************************* //
+// ********************************************************************************************* //
 
 FirebugReps.CSSRule = domplate(Firebug.Rep,
 {
@@ -2434,397 +2434,7 @@ FirebugReps.StackTrace = domplate(Firebug.Rep,
 
 // ********************************************************************************************* //
 
-FirebugReps.ErrorMessage = domplate(Firebug.Rep,
-{
-    sourceLimit: 80,
-    alterText: "...",
-
-    tag:
-        OBJECTBOX({
-            $hasTwisty: "$object|hasStackTrace",
-            $hasBreakSwitch: "$object|hasBreakSwitch",
-            $breakForError: "$object|hasErrorBreak",
-            _repObject: "$object",
-            _stackTrace: "$object|getLastErrorStackTrace",
-            onclick: "$onToggleError"},
-            DIV({"class": "errorTitle focusRow subLogRow", role: "listitem"},
-                SPAN({"class": "errorMessage"},
-                    "$object.message"
-                )
-            ),
-            DIV({"class": "errorTrace", role: "presentation"}),
-            TAG("$object|getObjectsTag", {object: "$object.objects"}),
-            DIV({"class": "errorSourceBox errorSource-$object|getSourceType focusRow subLogRow",
-                role: "listitem"},
-                TABLE({cellspacing: 0, cellpadding: 0},
-                    TBODY(
-                        TR(
-                            TD(
-                                SPAN({"class": "$object|isBreakableError a11yFocus",
-                                    role: "checkbox", "aria-checked": "$object|hasErrorBreak",
-                                    title: Locale.$STR("console.Break On This Error")})
-                            ),
-                            TD(
-                                A({"class": "errorSource a11yFocus"},
-                                    PRE({"class": "errorSourceCode",
-                                        title: "$object|getSourceTitle"}, "$object|getSource")
-                                )
-                            )
-                        ),
-                        TR({$collapsed: "$object|hideErrorCaret"},
-                            TD(),
-                            TD(
-                                DIV({"class": "errorColPosition"},
-                                    "$object|getColumnPosition"
-                                ),
-                                DIV({"class": "errorColCaret"})
-                            )
-                        )
-                    )
-                )
-            )
-        ),
-
-    getObjectsTag: function(error)
-    {
-        return error.objects ? FirebugReps.Arr.tag : SPAN();
-    },
-
-    getLastErrorStackTrace: function(error)
-    {
-        return error.trace;
-    },
-
-    hasStackTrace: function(error)
-    {
-        return error && error.trace;
-    },
-
-    hasBreakSwitch: function(error)
-    {
-        return error.href && error.lineNo > 0;
-    },
-
-    isBreakableError: function(error)
-    {
-        return (error.category === "js") ? "errorBreak" : "errorUnbreakable";
-    },
-
-    hasErrorBreak: function(error)
-    {
-        return FBS.fbs.hasErrorBreakpoint(Url.normalizeURL(error.href), error.lineNo);
-    },
-
-    getSource: function(error, noCrop)
-    {
-        if (error.source && noCrop)
-        {
-            return error.source;
-        }
-        else if (error.source)
-        {
-            return Str.cropStringEx(Str.trim(error.source), this.sourceLimit,
-                this.alterText, error.colNumber);
-        }
-
-        if (error.category == "js" && error.href &&
-            error.href.indexOf("XPCSafeJSObjectWrapper") != -1)
-        {
-            return "";
-        }
-
-        var source = error.getSourceLine();
-        if (source && noCrop)
-        {
-            return source;
-        }
-        else if (source)
-        {
-            return Str.cropStringEx(Str.trim(source), this.sourceLimit,
-                this.alterText, error.colNumber);
-        }
-
-        return "";
-    },
-
-    hideErrorCaret: function(error)
-    {
-        var source = this.getSource(error);
-        if (!source)
-            return true;
-
-        if (typeof(error.colNumber) == "undefined")
-            return true;
-
-        return false;
-    },
-
-    getColumnPosition: function(error)
-    {
-        if (this.hideErrorCaret(error))
-            return "";
-
-        var colNumber = error.colNumber;
-        var originalLength = error.source.length;
-        var trimmedLength = Str.trimLeft(error.source).length;
-
-        // The source line is displayed without starting whitespaces.
-        colNumber -= (originalLength - trimmedLength);
-
-        var source = this.getSource(error, true);
-        if (!source)
-            return "";
-
-        source = Str.trim(source);
-
-        // Count how much the pivot needs to be adjusted (based on Str.cropStringEx)
-        var halfLimit = this.sourceLimit/2;
-        var pivot = error.colNumber;
-        if (pivot < halfLimit)
-            pivot = halfLimit;
-
-        if (pivot > source.length - halfLimit)
-            pivot = source.length - halfLimit;
-
-        // Subtract some columns if the text has been cropped at the beginning.
-        var begin = Math.max(0, pivot - halfLimit);
-        colNumber -= begin;
-
-        // Add come cols because there is an alterText at the beginning now.
-        if (begin > 0)
-            colNumber += this.alterText.length;
-
-        var text = "";
-        for (var i=0; i<colNumber; i++)
-            text += "-";
-
-        return text;
-    },
-
-    getSourceTitle: function(error)
-    {
-        var source = this.getSource(error, true);
-        return source ? Str.trim(source) : "";
-    },
-
-    getSourceType: function(error)
-    {
-        // Errors occurring inside of HTML event handlers look like "foo.html (line 1)"
-        // so let's try to skip those
-        if (error.source)
-            return "syntax";
-        else if (error.category == "css")
-            return "show";
-        else if (!error.href || !error.lineNo)
-            return "none";
-        // Why do we have that at all?
-        else if (error.lineNo == 1 && Url.getFileExtension(error.href) != "js")
-            return "none";
-        else
-            return "show";
-    },
-
-    getTooltip: function(error)
-    {
-        if (error.missingTraceBecauseNoDebugger)
-            return Locale.$STR("console.tip.ErrorWithoutDebugger");
-    },
-
-    onToggleError: function(event)
-    {
-        var target = event.currentTarget;
-        if (Css.hasClass(event.target, "errorBreak"))
-        {
-            var panel = Firebug.getElementPanel(event.target);
-            this.breakOnThisError(target.repObject, panel.context);
-            return;
-        }
-        else if (Css.hasClass(event.target, "errorSourceCode"))
-        {
-            var panel = Firebug.getElementPanel(event.target);
-            this.inspectObject(target.repObject, panel.context);
-            return;
-        }
-
-        var errorTitle = Dom.getAncestorByClass(event.target, "errorTitle");
-        if (errorTitle)
-        {
-            var traceBox = target.childNodes[1];
-            Css.toggleClass(target, "opened");
-            event.target.setAttribute('aria-expanded', Css.hasClass(target, "opened"));
-
-            if (Css.hasClass(target, "opened"))
-            {
-                var panel = Firebug.getElementPanel(event.target);
-
-                if (target.stackTrace)
-                {
-                    FirebugReps.StackTrace.tag.append({object: target.stackTrace}, traceBox);
-                }
-                else if (target.repObject.missingTraceBecauseNoDebugger)
-                {
-                    var hasScriptPanel = PanelActivation.isPanelEnabled("script");
-                    var enableScriptPanel = function()
-                    {
-                        var scriptPanelType = Firebug.getPanelType("script");
-                        PanelActivation.enablePanel(scriptPanelType);
-                    };
-                    var msg = (hasScriptPanel ?
-                            "The debugger was deactivated when this error was thrown." : // XXX temporarily hard-coded, until we decide what to do here
-                            Locale.$STR("console.ScriptPanelMustBeEnabledForTraces"));
-
-                    FirebugReps.Description.render(msg, traceBox, enableScriptPanel);
-                }
-
-                if (Firebug.A11yModel.enabled)
-                {
-                    Events.dispatch(panel.fbListeners, "modifyLogRow", [panel, traceBox]);
-                }
-            }
-            else
-            {
-                Dom.clearNode(traceBox);
-            }
-        }
-    },
-
-    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-    copyError: function(error)
-    {
-        var message = [
-            error.message,
-            error.href,
-            "Line " +  error.lineNo
-        ];
-        System.copyToClipboard(message.join(Str.lineBreak()));
-    },
-
-    breakOnThisError: function(error, context)
-    {
-        var compilationUnit = context.getCompilationUnit(Url.normalizeURL(error.href));
-        if (!compilationUnit)
-        {
-            if (FBTrace.DBG_ERRORS)
-                FBTrace.sysout("reps.breakOnThisError has no source file for error.href: " +
-                    error.href + "  error:" + error, context);
-            return;
-        }
-
-        if (this.hasErrorBreak(error))
-            Firebug.Debugger.clearErrorBreakpoint(compilationUnit, error.lineNo);
-        else
-            Firebug.Debugger.setErrorBreakpoint(compilationUnit, error.lineNo);
-    },
-
-    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-    className: "errorMessage",
-    inspectable: false,
-
-    supportsObject: function(object, type)
-    {
-        return object instanceof FirebugReps.ErrorMessageObj;
-    },
-
-    inspectObject: function(error, context)
-    {
-        var sourceLink = error.getSourceLink();
-        FirebugReps.SourceLink.inspectObject(sourceLink, context);
-    },
-
-    getContextMenuItems: function(error, target, context)
-    {
-        var breakOnThisError = this.hasErrorBreak(error);
-
-        var items = [
-            {
-                label: "CopyError",
-                tooltiptext: "console.menu.tip.Copy_Error",
-                command: Obj.bindFixed(this.copyError, this, error)
-            }
-        ];
-
-        if (error.category != "css")
-        {
-            items.push(
-                "-",
-                {
-                    label: "BreakOnThisError",
-                    tooltiptext: "console.menu.tip.Break_On_This_Error",
-                    type: "checkbox",
-                    checked: breakOnThisError,
-                    command: Obj.bindFixed(this.breakOnThisError, this, error, context)
-                },
-                Menu.optionMenu("BreakOnAllErrors", "breakOnErrors",
-                    "console.menu.tip.Break_On_All_Errors")
-            );
-        }
-
-        return items;
-    }
-});
-
-// ********************************************************************************************* //
-
-FirebugReps.Except = domplate(Firebug.Rep,
-{
-    tag:
-        TAG(FirebugReps.ErrorMessage.tag, {object: "$object|getErrorMessage"}),
-
-    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-    className: "exception",
-
-    getTitle: function(object)
-    {
-        if (object.name)
-            return object.name + (object.message ? ": " + object.message : "");
-
-        if (object.message)
-            return object.message;
-
-        return "Exception";
-    },
-
-    getErrorMessage: function(object)
-    {
-        var context = Firebug.currentContext;
-        var win = context ? context.window : null;
-
-        var url = object.fileName ? object.fileName : (win ? win.location.href : "");
-        var lineNo = object.lineNumber ? object.lineNumber : 0;
-        var message = this.getTitle(object);
-
-        var trace;
-        if (object.stack)
-        {
-            trace = StackFrame.parseToStackTrace(object.stack, context);
-            trace = StackFrame.cleanStackTraceOfFirebug(trace);
-
-            if (!trace)
-                lineNo = 0;
-        }
-
-        var errorObject = new FirebugReps.ErrorMessageObj(message, url, lineNo, "", "js",
-            context, trace);
-
-        if (trace && trace.frames && trace.frames[0])
-            errorObject.correctWithStackTrace(trace);
-
-        errorObject.resetSource();
-        return errorObject;
-    },
-
-    supportsObject: function(object, type)
-    {
-        return (object instanceof FirebugReps.ErrorCopy) || Obj.XW_instanceof(object, Error);
-    }
-});
-
-// ********************************************************************************************* //
-
-// xxxsz: Is this code still in use? 
+// xxxsz: Is this code still in use?
 FirebugReps.Assert = domplate(Firebug.Rep,
 {
     tag:
@@ -3120,6 +2730,18 @@ FirebugReps.XPathResult = domplate(FirebugReps.Arr,
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
+    hasSpecialProperties: function(array)
+    {
+        // xxxHonza: fix for test console/api/log-xpathresult
+        // FirebugReps.Arr.hasSpecialProperties iterates object properties
+        // (using Object.getOwnPropertyNames), but misses 'constructor' if the property
+        // is not explicitely accessed before. Any explanation for such behavior?
+        // (btw. it was actually accessed, but order of 'supportsObject' calls changed when
+        // 'Exception' rep moved into its own module, see issue: 6606)
+        var ctor = array && array.constructor;
+        return FirebugReps.Arr.hasSpecialProperties.apply(this, arguments);
+    },
+
     supportsObject: function(xpathresult, type)
     {
         return (xpathresult instanceof window.XPathResult);
@@ -3160,21 +2782,18 @@ FirebugReps.Description = domplate(Firebug.Rep,
 
     // Use SPAN to make sure the description is nicely inserted into existing text inline.
     tag:
-        SPAN({onclick: "$onClickLink"}),
+        SPAN({"class": "descriptionBox", onclick: "$onClickLink"}),
 
     render: function(text, parentNode, listener)
     {
         var params = {};
-        if (listener)
+        params.onClickLink = function(event)
         {
-            params.onClickLink = function(event)
-            {
-                // Only clicks on links are passed to the original listener.
-                var localName = event.target.localName;
-                if (listener && localName && localName.toLowerCase() == "a")
-                    listener(event);
-            };
-        }
+            // Only clicks on links are passed to the original listener.
+            var localName = event.target.localName;
+            if (listener && localName && localName.toLowerCase() == "a")
+                listener(event);
+        };
 
         var rootNode = this.tag.replace(params, parentNode, this);
 
@@ -3333,12 +2952,18 @@ FirebugReps.NamedNodeMap = domplate(Firebug.Rep,
 
         if (object.length > max)
         {
-            props[Math.max(1,max-1)] = {
-                object: (object.length-max) + " " + Locale.$STR("firebug.reps.more") + "...",
+            var index = max - 1, more = object.length - max + 1;
+            if (index < 1)
+            {
+                index = 1;
+                more++;
+            }
+            props[index] = {
+                object: more + " " + Locale.$STR("firebug.reps.more") + "...",
                 tag: FirebugReps.Caption.tag,
                 name: "",
-                equal:"",
-                delim:""
+                equal: "",
+                delim: ""
             };
         }
         else if (props.length > 0)
@@ -3349,83 +2974,6 @@ FirebugReps.NamedNodeMap = domplate(Firebug.Rep,
         return props;
     },
 });
-
-// ********************************************************************************************* //
-// Error Message
-
-FirebugReps.ErrorMessageObj = function(message, href, lineNo, source, category, context,
-    trace, msgId, colNumber)
-{
-    this.message = message;
-    this.href = href;
-    this.lineNo = lineNo;
-    this.source = source;
-    this.category = category;
-    this.context = context;
-    this.trace = trace;
-    this.msgId = msgId || this.getId();
-    this.colNumber = colNumber;
-};
-
-FirebugReps.ErrorMessageObj.prototype =
-{
-    getSourceLine: function()
-    {
-        if (this.href === null)
-            return "";
-
-        if (!this.context.sourceCache)
-        {
-            if (FBTrace.DBG_ERRORS)
-                FBTrace.sysout("reps.ErrorMessageObj.getSourceLine; ERROR no source cache!");
-            return "";
-        }
-
-        return this.context.sourceCache.getLine(this.href, this.lineNo);
-    },
-
-    getSourceLink: function()
-    {
-        var ext = this.category == "css" ? "css" : "js";
-        return this.lineNo ? new SourceLink.SourceLink(this.href, this.lineNo, ext,
-            null, null, this.colNumber) : null;
-    },
-
-    resetSource: function()
-    {
-        if (this.href && this.lineNo != null)
-            this.source = this.getSourceLine();
-    },
-
-    correctWithStackTrace: function(trace)
-    {
-        var frame = trace.frames[0];
-        if (frame)
-        {
-            this.href = frame.href;
-            this.lineNo = frame.line;
-            this.trace = trace;
-        }
-    },
-
-    correctSourcePoint: function(sourceName, lineNumber)
-    {
-        this.href = sourceName;
-        this.lineNo = lineNumber;
-    },
-
-    getId: function()
-    {
-        return this.href + ":" + this.message + ":" + this.lineNo;
-    }
-};
-
-// ********************************************************************************************* //
-
-FirebugReps.ErrorCopy = function(message)
-{
-    this.message = message;
-};
 
 //********************************************************************************************** //
 
@@ -3492,7 +3040,6 @@ Firebug.registerRep(
     FirebugReps.ApplicationCache, // this also
     FirebugReps.RegExp,
     FirebugReps.Window,
-    FirebugReps.ErrorMessage,
     FirebugReps.Element,
     FirebugReps.TextNode,
     FirebugReps.Document,
@@ -3505,7 +3052,6 @@ Firebug.registerRep(
     FirebugReps.StackFrame,
     FirebugReps.NetFile,
     FirebugReps.Property,
-    FirebugReps.Except,
     FirebugReps.XML,
     FirebugReps.Arr,
     FirebugReps.ArrayLikeObject,
