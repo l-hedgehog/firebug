@@ -12,7 +12,8 @@ define([
     "firebug/lib/object",
 ],
 function(Firebug, Domplate, Locale, Dom, CommandLineExposed, Win, Xpcom, Events, Obj) {
-with (Domplate) {
+
+"use strict";
 
 // ********************************************************************************************* //
 // Constants
@@ -31,6 +32,8 @@ var CLOSURE_INSPECTOR_HELP_URL = "https://getfirebug.com/wiki/index.php/Closure_
 // ********************************************************************************************* //
 // Command Line Help
 
+var {domplate, SPAN, TABLE, THEAD, TR, TH, DIV, TBODY, TD, A, UL, LI, FOR, TAG} = Domplate;
+
 var HelpCaption = domplate(
 {
     tag:
@@ -43,10 +46,7 @@ var HelpCaption = domplate(
             )
         ),
 
-    getId: function()
-    {
-        return Obj.getUniqueId();
-    }
+    groupable: false
 });
 
 // The table UI should be based on tableRep
@@ -150,10 +150,7 @@ var TipsCaption = domplate(
             )
         ),
 
-    getId: function()
-    {
-        return Obj.getUniqueId();
-    }
+    groupable: false
 });
 
 var TipsList = domplate(
@@ -172,7 +169,7 @@ var Tip = domplate(
     tag:
         LI({"class": "tip"},
             SPAN({"class": "text"}, "$tip|getText"),
-            SPAN("&nbsp"),
+            SPAN("&nbsp;"),
             SPAN({"class": "example"},"$tip|getExample")
         ),
 
@@ -250,6 +247,9 @@ var CommandLineHelp = domplate(
             var config = CommandLineExposed.userCommands[name];
             var prop = config.getter || config.variable;
 
+            if (config.hidden)
+                continue;
+
             commands.push({
                 name: name,
                 desc: config.description,
@@ -324,4 +324,4 @@ Firebug.registerCommand("help", {
 return CommandLineHelp;
 
 // ********************************************************************************************* //
-}});
+});

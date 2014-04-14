@@ -61,7 +61,8 @@
        y2="13.048889"
        id="linearGradient3836"
        xlink:href="#linearGradient3830"
-       gradientUnits="userSpaceOnUse" />
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(0.99740928,0,0,1.0026042,-1.0103627,-0.02083319)" />
     <linearGradient
        x1="14.005195"
        y1="14.90165"
@@ -69,7 +70,8 @@
        y2="13.070129"
        id="linearGradient3838"
        xlink:href="#linearGradient3830"
-       gradientUnits="userSpaceOnUse" />
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(0.99740928,0,0,1.0026042,-0.95854892,-0.02083319)" />
     <linearGradient
        x1="9.0597401"
        y1="13.922078"
@@ -101,21 +103,21 @@
     </rdf:RDF>
   </metadata>
   <path
-     d="m 0.53389831,1.6440678 c 0,0 4.09510809,0 4.86440679,0 3.0514237,0 5.1016949,1.8279111 5.1016949,4.5677966 0,3.7372881 0,4.3305086 0,4.3305086 l 1.961303,0 -3.3850318,2.907109 -3.3821814,-2.914417 1.8991305,0 c 0,0 0,-1.8909972 0,-3.6113362 0,-1.5541052 -0.8660356,-2.4915254 -2.9661017,-2.4915254 -2.0169491,0 -4.09322029,0 -4.09322029,0 z"
+     d="m 0.53389831,2.46 c 0,0 3.09489729,2.034e-4 3.86419599,2.034e-4 3.0514237,0 5.1016949,1.8279111 5.1016949,4.5677966 0,3.737288 0,3.5651 0,3.5651 l 1.9613028,0 -3.3850316,2.907108 -3.3821814,-2.914417 1.8991305,0 c 0,0 0,-1.1255876 0,-2.8459266 0,-1.5541052 -0.8660356,-2.4915254 -2.9661017,-2.4915254 -2.0169491,0 -3.09300949,0 -3.09300949,0 z"
      id="path26"
      style="fill:url(#linearGradient3828);fill-opacity:1;stroke:url(#linearGradient3773);stroke-width:1;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none" />
   <rect
-     width="4.0103898"
-     height="1.9948052"
-     x="2.0155845"
-     y="12.987013"
+     width="4"
+     height="2"
+     x="1"
+     y="13"
      id="rect3800"
      style="fill:url(#linearGradient3836);fill-opacity:1;stroke:none" />
   <rect
-     width="4.0103898"
-     height="1.9948052"
-     x="11.989611"
-     y="12.987013"
+     width="4"
+     height="2"
+     x="11"
+     y="13"
      id="rect3800-1"
      style="fill:url(#linearGradient3838);stroke:none" />
 </svg>

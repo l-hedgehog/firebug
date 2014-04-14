@@ -5,16 +5,16 @@ define([
     "firebug/lib/options",
     "firebug/lib/locale",
     "firebug/lib/array",
+    "firebug/lib/string",
     "firebug/lib/xpcom",
     "firebug/firefox/browserOverlayLib",
     "firebug/firefox/browserCommands",
     "firebug/firefox/browserMenu",
     "firebug/firefox/browserToolbar",
+    "firebug/lib/system",
 ],
-function(FBTrace, Options, Locale, Arr, Xpcom, BrowserOverlayLib, BrowserCommands, BrowserMenu,
-    BrowserToolbar) {
-
-with (BrowserOverlayLib) {
+function(FBTrace, Options, Locale, Arr, Str, Xpcom, BrowserOverlayLib, BrowserCommands,
+    BrowserMenu, BrowserToolbar, System) {
 
 // ********************************************************************************************* //
 // Constants
@@ -23,12 +23,20 @@ var Cc = Components.classes;
 var Ci = Components.interfaces;
 var Cu = Components.utils;
 
+var {$, $el, $stylesheet, $menuitem} = BrowserOverlayLib;
+
 Locale.registerStringBundle("chrome://firebug/locale/firebug.properties");
 Locale.registerStringBundle("chrome://firebug/locale/cookies.properties");
 Locale.registerStringBundle("chrome://firebug/locale/selectors.properties");
+Locale.registerStringBundle("chrome://firebug/locale/keys.properties");
+Locale.registerStringBundle("chrome://global-platform/locale/platformKeys.properties");
+Locale.registerStringBundle("chrome://global/locale/keys.properties");
 
 Cu.import("resource://firebug/loader.js");
 Cu.import("resource://firebug/fbtrace.js");
+
+var servicesScope = {};
+Cu.import("resource://gre/modules/Services.jsm", servicesScope);
 
 const firstRunPage = "https://getfirebug.com/firstrun#Firebug ";
 
@@ -43,7 +51,7 @@ function BrowserOverlay(win)
 
 BrowserOverlay.prototype =
 {
-    // When Firebug is disabled or unistalled this elements must be removed from
+    // When Firebug is disabled or uninstalled this elements must be removed from
     // chrome UI (XUL).
     nodesToRemove: [],
 
@@ -62,6 +70,10 @@ BrowserOverlay.prototype =
             $(this.doc, "mainBroadcasterSet"));
 
         var node = $stylesheet(this.doc, "chrome://firebug/content/firefox/browserOverlay.css");
+
+        if (System.isMac(this.win))
+            $stylesheet(this.doc, "chrome://firebug/content/firefox/macBrowserOverlay.css");
+
         this.nodesToRemove.push(node);
 
         this.loadContextMenuOverlay();
@@ -80,7 +92,7 @@ BrowserOverlay.prototype =
     internationalize: function()
     {
         // Internationalize all elements with 'fbInternational' class. Clone
-        // before internationalizing.
+        // before internationalization.
         var elements = Arr.cloneArray(this.doc.getElementsByClassName("fbInternational"));
         Locale.internationalizeElements(this.doc, elements, ["label", "tooltiptext", "aria-label"]);
     },
@@ -141,7 +153,11 @@ BrowserOverlay.prototype =
         var self = this;
         scriptSources.forEach(function(url)
         {
-            $script(self.doc, url);
+            servicesScope.Services.scriptloader.loadSubScript(url, self.doc);
+
+            // xxxHonza: This doesn't work since Firefox 28. From some reason the script
+            // isn't parsed when inserted into the second browser window. See issue 6731
+            // $script(self.doc, url);
         });
 
         // Create Firebug splitter element.
@@ -166,8 +182,15 @@ BrowserOverlay.prototype =
 
             // xxxHonza: TODO find a better place for notifying extensions
             FirebugLoader.dispatchToScopes("firebugFrameLoad", [self.win.Firebug]);
-            callback && callback(self.win.Firebug);
+            if (callback)
+                callback(self.win.Firebug);
         }, false);
+    },
+
+    stopFirebug: function()
+    {
+        this.unloadContextMenuOverlay();
+        BrowserCommands.resetDisabledKeys(this.win);
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -294,8 +317,6 @@ BrowserOverlay.prototype =
 
     onViewMenuShowing: function()
     {
-        var suspendMarker = this.win.document.getElementById("firebugStatus");
-
         // Check whether Firebug is open
         var open = false;
         if (this.win.Firebug.chrome)
@@ -325,11 +346,11 @@ BrowserOverlay.prototype =
         for (var i=0; i<positions.length; i++)
         {
             var pos = positions[i];
-            var label = pos.charAt(0).toUpperCase() + pos.slice(1);
+            var label = Str.capitalize(pos);
 
             var item = $menuitem(this.doc, {
-                label: Locale.$STR("firebug.menu." + label),
-                tooltiptext: Locale.$STR("firebug.menu.tip." + label),
+                label: "firebug.menu." + label,
+                tooltiptext: "firebug.menu.tip." + label,
                 type: "radio",
                 oncommand: oncommand.replace("%pos%", pos),
                 checked: (currPos == pos)
@@ -363,6 +384,27 @@ BrowserOverlay.prototype =
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+    // Firebug PanelSelector Menu
+
+    onPanelSelectorShowing: function(popup)
+    {
+        var self = this;
+        this.startFirebug(function()
+        {
+            self.win.Firebug.PanelSelector.onMenuShowing(popup);
+        });
+    },
+
+    onPanelSelectorHiding: function(popup)
+    {
+        var self = this;
+        this.startFirebug(function()
+        {
+            self.win.Firebug.PanelSelector.onMenuHiding(popup);
+        });
+    },
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
     // Firebug Version
 
     getVersion: function()
@@ -380,16 +422,16 @@ BrowserOverlay.prototype =
         sis.close();
 
         var m = /RELEASE=(.*)/.exec(content);
-        if (m)
-            var release = m[1];
-        else
+        if (!m)
             return "no RELEASE in " + versionURL;
 
+        var release = m[1];
+
         m = /VERSION=(.*)/.exec(content);
-        if (m)
-            var version = m[1];
-        else
+        if (!m)
             return "no VERSION in " + versionURL;
+
+        var version = m[1];
 
         return version+""+release;
     },
@@ -549,4 +591,4 @@ BrowserOverlay.prototype =
 return BrowserOverlay;
 
 // ********************************************************************************************* //
-}});
+});

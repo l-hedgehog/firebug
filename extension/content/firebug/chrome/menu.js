@@ -5,9 +5,12 @@ define([
     "firebug/lib/locale",
     "firebug/lib/options",
     "firebug/lib/css",
-    "firebug/lib/deprecated"
+    "firebug/lib/deprecated",
+    "firebug/lib/system",
 ],
-function(FBTrace, Locale, Options, Css, Deprecated) {
+function(FBTrace, Locale, Options, Css, Deprecated, System) {
+
+"use strict";
 
 // ********************************************************************************************* //
 // Constants
@@ -20,7 +23,7 @@ Menu.createMenu = function(popup, item)
 {
     if (typeof item == "string")
     {
-        return Deprecated.deprecated("The function's header changed to "+
+        return Deprecated.method("The function's header changed to " +
             "createMenu(popup, item)",
             Menu.createMenu, [popup, {label: item}])();
     }
@@ -53,7 +56,20 @@ Menu.createMenuPopup = function(parent, item)
 Menu.createMenuItems = function(popup, items, before)
 {
     for (var i=0; i<items.length; i++)
-        Menu.createMenuItem(popup, items[i], before);
+    {
+        var item = items[i];
+
+        // Override existing items to avoid duplicates.
+        var existingItem = popup.querySelector("#" + item.id);
+        if (existingItem)
+        {
+            Menu.createMenuItem(popup, item, existingItem);
+            popup.removeChild(existingItem);
+            continue;
+        }
+
+        Menu.createMenuItem(popup, item, before);
+    }
 };
 
 Menu.createMenuItem = function(popup, item, before)
@@ -130,16 +146,12 @@ Menu.setItemIntoElement = function(element, item)
     if (item.name)
         element.setAttribute("name", item.name);
 
-    if (item.items && (item.command || item.commandID))
-    {
-        element.setAttribute("type", "splitmenu");
-        element.setAttribute("iconic", "true");
-    }
-
-    // xxxHonza: must be done after 'type' == 'splitmenu' otherwise the menu-item
-    // is not checked (the check icon is not displayed from some reason).
     if (item.checked)
         element.setAttribute("checked", "true");
+
+    // Allows to perform additional custom initialization of the menu-item.
+    if (item.initialize)
+        item.initialize(element);
 
     return element;
 };
@@ -161,16 +173,13 @@ Menu.createMenuSeparator = function(popup, item, before)
 {
     if (item instanceof Node)
     {
-        return Deprecated.deprecated("The function's header changed to "+
+        return Deprecated.method("The function's header changed to "+
             "createMenuSeparator(popup, item, before)",
             Menu.createMenuSeparator, [popup, null, before])();
     }
 
     if (!popup.firstChild)
         return;
-
-    if (FBTrace.DBG_MENU)
-        FBTrace.sysout("createMenuSeparator", {popup: popup, item: item, before: before});
 
     var menuItem = popup.ownerDocument.createElement("menuseparator");
     if (typeof item == "object" && item.id)
@@ -186,7 +195,7 @@ Menu.createMenuSeparator = function(popup, item, before)
 
 /**
  * Create an option menu item definition. This method is usually used in methods like:
- * {@link Firebug.Panel.getOptionsMenuItems} or {@link Firebug.Panel.getContextMenuItems}.
+ * {@link Panel.getOptionsMenuItems} or {@link Panel.getContextMenuItems}.
  *
  * @param {String} label Name of the string from *.properties file.
  * @param {String} option Name of the associated option.
@@ -205,6 +214,20 @@ Menu.optionMenu = function(label, option, tooltiptext)
             return Options.togglePref(option);
         }
     };
+};
+
+/**
+ * Remove unnecessary separators (at the top or at the bottom of the menu).
+ */
+Menu.optimizeSeparators = function(popup)
+{
+    while (popup.firstChild && popup.firstChild.tagName == "menuseparator")
+        popup.removeChild(popup.firstChild);
+
+    while (popup.lastChild && popup.lastChild.tagName == "menuseparator")
+        popup.removeChild(popup.lastChild);
+
+    // xxxHonza: We should also check double-separators
 };
 
 // ********************************************************************************************* //

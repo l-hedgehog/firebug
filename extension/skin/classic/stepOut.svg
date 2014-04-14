@@ -54,7 +54,7 @@
        id="linearGradient3828"
        xlink:href="#linearGradient3822"
        gradientUnits="userSpaceOnUse"
-       gradientTransform="matrix(0,-1,1,0,2.5505178,14.077)" />
+       gradientTransform="matrix(0,-1,1,0,2.5505178,12.961304)" />
     <linearGradient
        x1="14.005195"
        y1="14.90165"
@@ -63,7 +63,7 @@
        id="linearGradient3019"
        xlink:href="#linearGradient3830"
        gradientUnits="userSpaceOnUse"
-       gradientTransform="translate(-2.0155845,0)" />
+       gradientTransform="matrix(0.99740928,0,0,1.0026042,-0.95854848,-0.02083307)" />
     <linearGradient
        x1="3.8649352"
        y1="14.91948"
@@ -72,7 +72,7 @@
        id="linearGradient3022"
        xlink:href="#linearGradient3830"
        gradientUnits="userSpaceOnUse"
-       gradientTransform="translate(-2.0155845,0)" />
+       gradientTransform="matrix(0.99740928,0,0,1.0026042,-1.0103627,-0.02083319)" />
     <linearGradient
        x1="10.70659"
        y1="15.029273"
@@ -89,7 +89,8 @@
        y2="4.703207"
        id="linearGradient3777"
        xlink:href="#linearGradient3918"
-       gradientUnits="userSpaceOnUse" />
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="translate(0,-1.1156965)" />
   </defs>
   <metadata
      id="metadata7">
@@ -104,21 +105,21 @@
     </rdf:RDF>
   </metadata>
   <path
-     d="m 5.4857143,14.566234 c 0,0 0,-5.67226 0,-6.4415587 0,-3.0514237 1.5549642,-4.5476758 4.2948497,-4.5476758 3.737288,0 2.730508,0 2.730508,0 l 0,-1.961303 2.90711,3.3850318 -2.914418,3.3821814 0,-1.8991305 c 0,0 -1.329958,-6.623e-4 -1.803543,-6.623e-4 -1.5541056,0 -2.2222989,0.5181157 -2.2222989,2.6181818 0,2.0169493 0,5.4649353 0,5.4649353 z"
+     d="m 6.4857466,12.500001 c 0,0 0,-4.7217235 0,-5.4910222 0,-3.0514237 1.5549643,-4.5476758 4.2948494,-4.5476758 3.737288,0 1.730476,-3.03e-4 1.730476,-3.03e-4 l 0,-1.961 2.90711,3.3850318 -2.914418,3.3821814 0,-1.8991305 c 0,0 -0.329926,-6.623e-4 -0.803511,-6.623e-4 -1.554105,0 -2.2222985,0.5181157 -2.2222985,2.6181818 0,2.0169498 0,4.5143978 0,4.5143978 z"
      id="path26"
      style="fill:url(#linearGradient3828);fill-opacity:1;stroke:url(#linearGradient3777);stroke-linejoin:round" />
   <rect
-     width="4.0103898"
-     height="1.9948052"
-     x="-3.1158446e-008"
-     y="12.987013"
+     width="4"
+     height="2"
+     x="1"
+     y="13"
      id="rect3800"
      style="fill:url(#linearGradient3022);fill-opacity:1;stroke:none" />
   <rect
-     width="4.0103898"
-     height="1.9948052"
-     x="9.9740257"
-     y="12.987013"
+     width="4"
+     height="2"
+     x="11"
+     y="13"
      id="rect3800-1"
      style="fill:url(#linearGradient3019);stroke:none" />
 </svg>

@@ -1,11 +1,10 @@
 // Test entry point.
 function runTest()
 {
-    FBTest.sysout("issue1256.START");
     FBTest.openNewTab(basePath + "net/1256/issue1256.html", function(win)
     {
         // Open Firebug UI and enable Net panel.
-        FBTest.enableNetPanel(function(win) 
+        FBTest.enableNetPanel(function(win)
         {
             FBTest.sysout("issue1256.onReload; " + win.location.href);
 
@@ -36,7 +35,7 @@ function runTest()
                     FBTest.compare("1 + 2", paramValue, "The parameter value must be '1 + 2'");
                 }
 
-                FBTest.testDone("issue1256.DONE");
+                FBTest.testDone();
             });
 
             FBTest.click(win.document.getElementById("testButton"));

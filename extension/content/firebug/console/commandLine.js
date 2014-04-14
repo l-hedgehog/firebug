@@ -1,20 +1,25 @@
 /* See license.txt for terms of usage */
-/*jshint forin:false, noempty:false, esnext:true, es5:true, curly:false */
+/*jshint forin:false, noempty:false, esnext:true, curly:false */
 /*global FBTrace:true, Components:true, define:true, KeyEvent:true */
 
 define([
-    "firebug/lib/object",
     "firebug/firebug",
-    "firebug/chrome/reps",
+    "firebug/lib/trace",
+    "firebug/lib/object",
     "firebug/lib/locale",
     "firebug/lib/events",
     "firebug/lib/url",
     "firebug/lib/dom",
-    "firebug/chrome/firefox",
-    "firebug/chrome/window",
     "firebug/lib/system",
     "firebug/lib/string",
     "firebug/lib/persist",
+    "firebug/lib/options",
+    "firebug/chrome/module",
+    "firebug/chrome/reps",
+    "firebug/chrome/firefox",
+    "firebug/chrome/window",
+    "firebug/debugger/script/sourceLink",
+    "firebug/debugger/debuggerLib",
     "firebug/console/console",
     "firebug/console/commandLineExposed",
     "firebug/console/closureInspector",
@@ -24,32 +29,63 @@ define([
     "firebug/console/commands/commandLineHelp",
     "firebug/console/commands/commandLineInclude",
 ],
-function(Obj, Firebug, FirebugReps, Locale, Events, Url, Dom, Firefox, Win, System, Str,
-    Persist, Console, CommandLineExposed, ClosureInspector, CommandLineAPI) {
+function(Firebug, FBTrace, Obj, Locale, Events, Url, Dom, System, Str, Persist, Options,
+    Module, FirebugReps, Firefox, Win, SourceLink, DebuggerLib, Console, CommandLineExposed,
+    ClosureInspector, CommandLineAPI) {
 
 "use strict";
 
 // ********************************************************************************************* //
 // Constants
 
-const Cc = Components.classes;
+var Cc = Components.classes;
 
-const commandPrefix = ">>> ";
+var commandPrefix = ">>> ";
+var Trace = FBTrace.to("DBG_COMMANDLINE");
+var TraceError = FBTrace.toError();
 
 // ********************************************************************************************* //
 // Command Line
 
-Firebug.CommandLine = Obj.extend(Firebug.Module,
+/**
+ * @module
+ */
+var CommandLine = Obj.extend(Module,
+/** @lends CommandLine */
 {
     dispatchName: "commandLine",
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
+    /**
+     * Evaluates an expression either in the global scope or in the current scope
+     * of the JS debugger, depending on the state of Firebug (i.e. if the debugger is currently
+     * active, etc.).
+     *
+     * @param {string} expr The expression.
+     * @param {Context} context The Firebug context.
+     * @param {*} [thisValue] Deprecated. Set it to null or undefined.
+     * @param {Window} [targetWindow] The window in which the expression is evaluated.
+     * @param {function} [successConsoleFunction] The callback function in case of
+     *      evaluation without errors.
+     * @param {function} [exceptionFunction] The callback function in case of
+     *      evaluation with errors.
+     * @param {object} [options] The options with the following properties:
+     *      - noStateChange: if set to true, do not update the DOM and HTML panels. (default=false)
+     *      - noCmdLineAPI: if set to true, do not evaluate with the Firebug commands. (default=false)
+     */
     evaluate: function(expr, context, thisValue, targetWindow, successConsoleFunction,
-        exceptionFunction, noStateChange)
+        exceptionFunction, options)
     {
         if (!context)
             return;
+
+        // Previously there was `noStateChange` in place of `options`. For backward compatibility,
+        // if `options` is a boolean, its value is meant to be `noStateChange`.
+        if (typeof options === "boolean")
+            options = {noStateChange: options};
+        else if (options == null)
+            options = {};
 
         targetWindow = targetWindow || context.getCurrentGlobal();
 
@@ -58,31 +94,37 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
         {
             debuggerState = Firebug.Debugger.beginInternalOperation();
 
-            var newExpr = ClosureInspector.extendLanguageSyntax(expr, targetWindow, context);
+            var evaluate = function(newExpr)
+            {
+                if (this.isSandbox(context))
+                {
+                    this.evaluateInSandbox(newExpr, context, thisValue, targetWindow,
+                        successConsoleFunction, exceptionFunction, expr);
+                }
+                else if (Firebug.Debugger.hasValidStack(context))
+                {
+                    this.evaluateInDebugFrame(newExpr, context, thisValue, targetWindow,
+                        successConsoleFunction, exceptionFunction, expr, options);
+                }
+                else
+                {
+                    this.evaluateInGlobal(newExpr, context, thisValue, targetWindow,
+                        successConsoleFunction, exceptionFunction, expr, options);
+                }
+            }.bind(this);
 
-            if (this.isSandbox(context))
-            {
-                this.evaluateInSandbox(newExpr, context, thisValue, targetWindow,
-                    successConsoleFunction, exceptionFunction, expr);
-            }
-            else if (Firebug.Debugger.hasValidStack(context))
-            {
-                this.evaluateInDebugFrame(newExpr, context, thisValue, targetWindow,
-                    successConsoleFunction, exceptionFunction, expr);
-            }
+            if (options.noCmdLineAPI)
+                evaluate(expr);
             else
-            {
-                this.evaluateInGlobal(newExpr, context, thisValue, targetWindow,
-                    successConsoleFunction, exceptionFunction, expr);
-            }
+                ClosureInspector.withExtendedLanguageSyntax(expr, targetWindow, context, evaluate);
 
-            if (!noStateChange)
-                context.invalidatePanels("dom", "html");
+            if (!options.noStateChange)
+                context.invalidatePanels("dom", "html", "watches");
         }
         catch (exc)
         {
             // XXX jjb, I don't expect this to be taken, the try here is for the finally
-            if (FBTrace.DBG_ERRORS && FBTrace.DBG_COMMANDLINE)
+            if (FBTrace.DBG_ERRORS)
             {
                 FBTrace.sysout("commandLine.evaluate with context.stopped:" + context.stopped +
                     " EXCEPTION " + exc, exc);
@@ -94,95 +136,78 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
         }
     },
 
+    /**
+     * Evaluates an expression in the global scope.
+     *
+     * @param {string} expr The expression.
+     * @param {Context} context The Firebug context.
+     * @param {*} [thisValue] Deprecated. Set it to null or undefined.
+     * @param {Window} [targetWindow] The window in which the expression is evaluated.
+     * @param {function} [successConsoleFunction] The callback function in case of
+     *      evaluation without errors.
+     * @param {function} [exceptionFunction] The callback function in case of
+     *      evaluation with errors.
+     * @param {string} [origExpr] The original expression before it has been transformed
+     *          (mainly used by ClosureInspector). If not set, origExpr=expr.
+     * @param {object} [options] The options with the following properties:
+     *      - noCmdLineAPI: if set to true, do not evaluate with the Firebug commands. (default=false)
+     */
     evaluateInGlobal: function(expr, context, thisValue, targetWindow,
-        successConsoleFunction, exceptionFunction, origExpr)
+        successConsoleFunction, exceptionFunction, origExpr, options)
     {
-        var win = targetWindow || context.getCurrentGlobal();
+        // Setting the execution context type.
+        var args = ["global"];
+        // Append arguments of this function.
+        args.push.apply(args, arguments);
 
-        if (!win)
-        {
-            if (FBTrace.DBG_ERRORS && FBTrace.DBG_COMMANDLINE)
-                FBTrace.sysout("commandLine.evaluateInGlobal: no targetWindow!");
-            return;
-        }
-
-        context.baseWindow = context.baseWindow || context.window;
-        var onSuccess, onError;
-
-        if (successConsoleFunction)
-        {
-            onSuccess = function(result)
-            {
-                if (FBTrace.DBG_COMMANDLINE)
-                {
-                    FBTrace.sysout("commandLine.evaluateInGlobal; the evaluation succeeded "+
-                        "and returned: "+ result, result);
-                }
-
-                if (Console.isDefaultReturnValue(result))
-                    return;
-
-                successConsoleFunction(result, context);
-            }
-        }
-
-        if (!exceptionFunction)
-        {
-            exceptionFunction = function(result, context)
-            {
-                Firebug.Console.logFormatted([result], context, "error", true);
-            }
-        }
-
-        onError = function(result)
-        {
-            if (FBTrace.DBG_COMMANDLINE)
-            {
-                FBTrace.sysout("commandLine.evaluateInGlobal; the evaluation threw "+
-                    "an exception:" + result, result);
-            }
-
-            exceptionFunction(result, context, "errorMessage");
-        };
-
-        origExpr = origExpr || expr;
-        CommandLineExposed.evaluate(context, win, expr, origExpr, onSuccess, onError);
+        return evaluateExpression.apply(null, args);
     },
 
+    /**
+     * Evaluates an expression in the current frame.
+     *
+     * @param {string} expr The expression.
+     * @param {Context} context The Firebug context.
+     * @param {*} [thisValue] Deprecated. Set it to null or undefined.
+     * @param {Window} [targetWindow] The window in which the expression is evaluated.
+     * @param {function} [successConsoleFunction] The callback function in case of
+     *      evaluation without errors.
+     * @param {function} [exceptionFunction] The callback function in case of
+     *      evaluation with errors.
+     * @param {string} [origExpr] The original expression before it has been transformed
+     *          (mainly used by ClosureInspector). If not set, origExpr=expr.
+     * @param {object} [options] The options with the following properties:
+     *      - noCmdLineAPI: if set to true, do not evaluate with the Firebug commands. (default=false)
+     */
     evaluateInDebugFrame: function(expr, context, thisValue, targetWindow,
-        successConsoleFunction, exceptionFunction)
+        successConsoleFunction, exceptionFunction, origExpr, options)
     {
-        var result = null;
+        // Setting the execution context type.
+        var args = ["frame"];
+        // Append arguments of this function.
+        args.push.apply(args, arguments);
 
-        if (!context.commandLineAPI)
-            context.commandLineAPI = CommandLineAPI.getCommandLineAPI(context);
-
-        var htmlPanel = context.getPanel("html", true);
-        var scope = {
-            api       : context.commandLineAPI,
-            vars      : htmlPanel ? htmlPanel.getInspectorVars() : null,
-            thisValue : thisValue
-        };
-
-        try
-        {
-            result = Firebug.Debugger.evaluate(expr, context, scope);
-
-            successConsoleFunction(result, context);
-        }
-        catch (e)
-        {
-            exceptionFunction(e, context);
-        }
-
-        return result;
+        return evaluateExpression.apply(null, args);
     },
 
+    /**
+     * Evaluate an expression in a webpage, inserting a temporary script in it.
+     *
+     * @param {string} expr The expression
+     * @param {object} context
+     * @param {Window} [targetWindow] The window in which we evaluate the expression
+     */
     evaluateInWebPage: function(expr, context, targetWindow)
     {
         var win = targetWindow || context.getCurrentGlobal();
 
-        var element = Dom.addScript(win.document, "_firebugInWebPage", expr);
+        Trace.sysout("CommandLine.evaluateInWebPage; expression = " + expr, expr);
+        // Dom.addScript checks whether an element with the given ID already exists and returns it
+        // when it is the case. But we might have to call evaluateInWebPage multiple times before
+        // the setTimeout() callback to remove the element is called. So we generate a unique ID.
+        var elementId = "_firebugInWebPage" + Math.random();
+
+        var element = Dom.addScript(win.document, elementId, expr);
         if (!element)
             return;
 
@@ -241,23 +266,16 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
         if (expr === "")
             return;
 
-        var mozJSEnabled = Firebug.Options.getPref("javascript", "enabled");
-        if (!mozJSEnabled)
-        {
-            Firebug.Console.log(Locale.$STR("console.JSDisabledInFirefoxPrefs"), context, "info");
-            return;
-        }
-
         if (!Firebug.commandEditor || context.panelName !== "console")
         {
             this.clear(context);
-            Firebug.Console.log(commandPrefix + expr, context, "command", FirebugReps.Text);
+            Firebug.Console.log(commandPrefix + expr, context, "command", FirebugReps.Command);
         }
         else
         {
             var shortExpr = Str.cropString(Str.stripNewLines(expr), 100);
             Firebug.Console.log(commandPrefix + shortExpr, context, "command",
-                FirebugReps.Text);
+                FirebugReps.Command);
         }
 
         this.commandHistory.appendToHistory(expr);
@@ -332,8 +350,10 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
         System.copyToClipboard(expr);
     },
 
-    focus: function(context)
+    focus: function(context, options)
     {
+        options = options || {};
+
         if (Firebug.isDetached())
             Firebug.chrome.focus();
         else
@@ -355,11 +375,17 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
             // We are already on the console, if the command line has also
             // the focus, toggle back. But only if the UI has been already
             // opened.
-            if (Firebug.commandEditor)
+            if (!options.select)
                 commandLine.focus();
-            else if (commandLine.getAttribute("focused") !== "true")
-                setTimeout(function() { commandLine.select(); });
+            else
+                commandLine.select();
         }
+    },
+
+    blur: function(context)
+    {
+        var commandLine = this.getCommandLine(context);
+        commandLine.blur();
     },
 
     clear: function(context)
@@ -391,7 +417,7 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
     // xxxsz: setMultiLine should just be called when switching between Command Line
     // and Command Editor
     // xxxHonza: it is called for me when switching between the Command Line and
-    // Command Editor 
+    // Command Editor
     setMultiLine: function(multiLine, chrome, saveMultiLine)
     {
         var context = Firebug.currentContext;
@@ -405,21 +431,31 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
         if (context && context.panelName !== "console")
             return;
 
+        var commandLine = this.getSingleRowCommandLine();
+        var commandEditor = this.getCommandEditor();
+
+        // We are just closing the view.
+        if (saveMultiLine)
+        {
+            commandLine.value = commandEditor.value;
+
+            // Specify that the Command Editor is hidden, so we remove the padding
+            // which causes an unresponsive warning (see issue 6824).
+            if (commandEditor)
+                commandEditor.addOrRemoveClassCommandEditorHidden(true);
+
+            return;
+        }
+
         Dom.collapse(chrome.$("fbCommandBox"), multiLine);
         Dom.collapse(chrome.$("fbPanelSplitter"), !multiLine);
         Dom.collapse(chrome.$("fbSidePanelDeck"), !multiLine);
 
         if (multiLine)
-            chrome.$("fbSidePanelDeck").selectedPanel = chrome.$("fbCommandEditorBox");
-
-        var commandLine = this.getSingleRowCommandLine();
-        var commandEditor = this.getCommandEditor();
-
-        // we are just closing the view
-        if (saveMultiLine)
         {
-            commandLine.value = commandEditor.value;
-            return;
+            if (commandEditor)
+                commandEditor.addOrRemoveClassCommandEditorHidden(false);
+            chrome.$("fbSidePanelDeck").selectedPanel = chrome.$("fbCommandEditorBox");
         }
 
         if (context)
@@ -432,14 +468,16 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
             else
                 commandLine.value = Str.stripNewLines(text);
         }
+
         // else we may be hiding a panel while turning Firebug off
     },
 
-    toggleMultiLine: function(forceCommandEditor)
+    toggleCommandEditor: function(isMultiLine)
     {
-        var showCommandEditor = !!forceCommandEditor || !Firebug.commandEditor;
-        if (showCommandEditor != Firebug.commandEditor)
-            Firebug.Options.set("commandEditor", showCommandEditor);
+        var context = Firebug.currentContext;
+        Options.set("commandEditor", isMultiLine);
+        Firebug.chrome.focus();
+        this.getCommandLine(context).focus();
     },
 
     checkOverflow: function(context)
@@ -452,7 +490,7 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
         {
             setTimeout(Obj.bindFixed(function()
             {
-                Firebug.Options.set("commandEditor", true);
+                Options.set("commandEditor", true);
 
                 // Switch to the Console panel, where the multiline command line
                 // is actually displayed. This should be improved see issue 5146
@@ -461,9 +499,15 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
         }
     },
 
-    onCommandLineOverflow: function(event)
+    onCommandLinePaste: function(event)
     {
-        this.checkOverflow(Firebug.currentContext);
+        // When pasting mutli-line command (a text including end-of-line characters) into
+        // the Command Line make sure the Console panel and Command Editor is selected,
+        // see also issue 5146. Also, use timeout since the value is set asynchronously.
+        // Switching into the Console panel is done upon "paste" event not "overflow",
+        // see issue 7124.
+        var context = Firebug.currentContext;
+        context.setTimeout(() => this.checkOverflow(context));
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -471,7 +515,7 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
 
     initialize: function()
     {
-        Firebug.Module.initialize.apply(this, arguments);
+        Module.initialize.apply(this, arguments);
 
         this.setAutoCompleter();
         this.commandHistory = new Firebug.CommandHistory();
@@ -490,7 +534,7 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
         var completionBox = this.getCompletionBox();
 
         var options = {
-            showCompletionPopup: Firebug.Options.get("commandLineShowCompleterPopup"),
+            showCompletionPopup: Options.get("commandLineShowCompleterPopup"),
             completionPopup: Firebug.chrome.$("fbCommandLineCompletionList"),
             popupMeasurer: Firebug.chrome.$("fbCommandLineMeasurer"),
             tabWarnings: true,
@@ -504,10 +548,10 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
     initializeUI: function()
     {
         this.onCommandLineInput = Obj.bind(this.onCommandLineInput, this);
-        this.onCommandLineOverflow = Obj.bind(this.onCommandLineOverflow, this);
         this.onCommandLineKeyUp = Obj.bind(this.onCommandLineKeyUp, this);
         this.onCommandLineKeyDown = Obj.bind(this.onCommandLineKeyDown, this);
         this.onCommandLineKeyPress = Obj.bind(this.onCommandLineKeyPress, this);
+        this.onCommandLinePaste = Obj.bind(this.onCommandLinePaste, this);
         this.attachListeners();
     },
 
@@ -516,10 +560,10 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
         var commandLine = this.getSingleRowCommandLine();
 
         Events.addEventListener(commandLine, "input", this.onCommandLineInput, true);
-        Events.addEventListener(commandLine, "overflow", this.onCommandLineOverflow, true);
         Events.addEventListener(commandLine, "keyup", this.onCommandLineKeyUp, true);
         Events.addEventListener(commandLine, "keydown", this.onCommandLineKeyDown, true);
         Events.addEventListener(commandLine, "keypress", this.onCommandLineKeyPress, true);
+        Events.addEventListener(commandLine, "paste", this.onCommandLinePaste, true);
     },
 
     shutdown: function()
@@ -533,10 +577,10 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
             this.commandHistory.detachListeners();
 
         Events.removeEventListener(commandLine, "input", this.onCommandLineInput, true);
-        Events.removeEventListener(commandLine, "overflow", this.onCommandLineOverflow, true);
         Events.removeEventListener(commandLine, "keyup", this.onCommandLineKeyUp, true);
         Events.removeEventListener(commandLine, "keydown", this.onCommandLineKeyDown, true);
         Events.removeEventListener(commandLine, "keypress", this.onCommandLineKeyPress, true);
+        Events.removeEventListener(commandLine, "paste", this.onCommandLinePaste, true);
     },
 
     destroyContext: function(context, persistedState)
@@ -544,8 +588,11 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
         var panelState = Persist.getPersistedState(this, "console");
         panelState.commandLineText = context.commandLineText;
 
+        // Clean up the Command Line (the input field it's shared among all contexts)
+        // only if this context is the currently displayed one. See also issue 7060.
         var commandLine = this.getCommandLine(context);
-        commandLine.value = "";
+        if (context === Firebug.currentContext)
+            commandLine.value = "";
 
         this.autoCompleter.hide();
         Persist.persistObjects(this, panelState);
@@ -638,18 +685,17 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
         switch (event.keyCode)
         {
             case KeyEvent.DOM_VK_RETURN:
-            case KeyEvent.DOM_VK_ENTER:
                 event.preventDefault();
 
                 if (!event.metaKey && !event.shiftKey)
                 {
-                    Firebug.CommandLine.enter(Firebug.currentContext);
+                    CommandLine.enter(Firebug.currentContext);
                     this.commandHistory.hide();
                     return true;
                 }
                 else if(!event.metaKey && event.shiftKey)
                 {
-                    Firebug.CommandLine.enterInspect(Firebug.currentContext);
+                    CommandLine.enterInspect(Firebug.currentContext);
                     this.commandHistory.hide();
                     return true;
                 }
@@ -667,7 +713,7 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
 
             case KeyEvent.DOM_VK_ESCAPE:
                 event.preventDefault();
-                if (Firebug.CommandLine.cancel(Firebug.currentContext))
+                if (CommandLine.cancel(Firebug.currentContext))
                     Events.cancelEvent(event);
                 this.commandHistory.hide();
                 return true;
@@ -697,7 +743,7 @@ Firebug.CommandLine = Obj.extend(Firebug.Module,
     isInOtherPanel: function(context)
     {
         // Command line on other panels is never multiline.
-        var visible = Firebug.CommandLine.Popup.isVisible();
+        var visible = CommandLine.Popup.isVisible();
         return visible && context.panelName !== "console";
     },
 
@@ -739,12 +785,90 @@ var getNoScript = function()
     return noscript;
 };
 
+function evaluateExpression(execContextType, expr, context, thisValue, targetWindow,
+        successConsoleFunction, exceptionFunction, origExpr, options)
+{
+    var win = targetWindow || context.getCurrentGlobal();
+    options = options || {};
+
+    if (!win)
+    {
+        if (FBTrace.DBG_ERRORS && FBTrace.DBG_COMMANDLINE)
+            FBTrace.sysout("commandLine.evaluateExpression: no targetWindow!");
+        return;
+    }
+
+    var onSuccess, onError;
+
+    if (successConsoleFunction)
+    {
+        onSuccess = function(result)
+        {
+            if (FBTrace.DBG_COMMANDLINE)
+            {
+                FBTrace.sysout("commandLine.evaluateExpression; the evaluation succeeded "+
+                    "and returned: ", result);
+            }
+
+            if (Console.isDefaultReturnValue(result))
+                return;
+
+            successConsoleFunction(result, context);
+        };
+    }
+
+    if (!exceptionFunction)
+    {
+        exceptionFunction = function(result, context)
+        {
+            Firebug.Console.logFormatted([result], context, "error", true);
+        };
+    }
+
+    onError = function(result)
+    {
+        if (FBTrace.DBG_COMMANDLINE)
+        {
+            FBTrace.sysout("commandLine.evaluateExpression; the evaluation threw "+
+                "an exception:" + result, result);
+        }
+
+        exceptionFunction(result, context, "errorMessage");
+    };
+
+    origExpr = origExpr || expr;
+
+    if (execContextType === "frame")
+    {
+        var frame = DebuggerLib.getCurrentFrame(context);
+        if (!frame)
+        {
+            TraceError.sysout("CommandLine.evaluate; frame not found");
+            return;
+        }
+
+        CommandLineExposed.evaluateInFrame(frame, context, win, expr, origExpr,
+            onSuccess, onError, options);
+    }
+    else if (execContextType === "global")
+    {
+        CommandLineExposed.evaluate(context, win, expr, origExpr, onSuccess, onError, options);
+    }
+    else
+    {
+        throw "CommandLineExposed.evaluateExpression; Invalid value for execContextType";
+    }
+}
+
 // ********************************************************************************************* //
 // Registration
 
-Firebug.registerModule(Firebug.CommandLine);
+Firebug.registerModule(CommandLine);
 
-return Firebug.CommandLine;
+// xxxHonza: backward compatibility.
+Firebug.CommandLine = CommandLine;
+
+return CommandLine;
 
 // ********************************************************************************************* //
 });

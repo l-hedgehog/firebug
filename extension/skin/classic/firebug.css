@@ -19,51 +19,24 @@
 /* end overrides */
 
 /*************************************************************************************************/
-
-#fbInspectButton {
-    margin-bottom: 1px;
-    padding: 0px;
-    opacity: 0.8;
-
-    /* The default styling does not always keep button size content or image
-       position constant, e.g. when [checked="true"].  These numbers were
-       chosen to keep them constant against the default winstripe styling. */
-    padding-top: 4px;
-    padding-bottom: 2px;
-    -moz-padding-start: 4px;
-    -moz-padding-end: 2px;
-}
-
-#fbBreakOnNextButton {
-    margin-bottom: 1px;
-    opacity: 0.8;
-    padding-right: 2px;
-    padding-left: 2px;
-        /* The default styling does not always keep button size contant or image
-       position constant, e.g. when [checked="true"].  These numbers were
-       chosen to keep them constant against the default winstripe styling. */
-    padding-top: 4px;
-    padding-bottom: 2px;
-    -moz-padding-start: 4px;
-    -moz-padding-end: 2px;
-}
-
-/*************************************************************************************************/
 /* Command Line */
 
-#fbCommandArrow {
-    margin: 2px 0 2px 7px;
+#fbCommandArrow,
+.fbCommandLine {
     font-family: monospace;
+    font-size: 10px;
+}
+
+#fbCommandArrow {
+    margin-left: 7px;
     color: #0000FF;
 }
 
 .fbCommandLine {
     -moz-appearance: none;
-    margin: 2px 0 0 0;
-    padding: 0 4px;
+    margin: 0 0 0 4px !important;
+    padding: 2px 0 !important;
     border: none;
-    font-family: monospace;
-    font-size: 12px;
     direction: ltr;
     width: 100%;
     background: none repeat scroll 0% 0% transparent;
@@ -87,6 +60,37 @@
     direction: ltr;
 }
 
+#fbCommandToolbar {
+    padding-left: 27px;
+    padding: 1px 0;
+    border-bottom: 1px solid rgba(10, 31, 51, 0.35);
+    height: calc(20rem + 8px);
+}
+
+#fbToggleCommandEditorBox {
+    background-color: white;
+    padding: 0;
+    margin: 0;
+}
+
+#fbToggleCommandEditorBox .column {
+    width: 31px;
+    background-color: rgb(238, 238, 238);
+    border-right: 1px solid rgb(221, 221, 221);
+}
+
+#fbToggleCommandEditor {
+    margin: 2px;
+}
+
+#fbCommandLineHistoryButton {
+    margin: 2px;
+}
+
+#fbToggleCommandLine {
+    margin: 2px;
+}
+
 #fbCommandLine > .textbox-input-box > .textbox-textarea {
     overflow: hidden;
 }
@@ -99,13 +103,18 @@
 .fbCommandHtmlBox .background {
     position: relative;
     background: none repeat scroll 0% 0% transparent;
+    vertical-align: middle;
+}
+
+#fbCommandLineCompletionHolder {
+    position: absolute;
+    width: 100%;
+    z-index: 1;
 }
 
 #fbCommandLineCompletion {
-    position: absolute;
-    z-index: 1;
     color: #A0A0A0;
-    bottom: 0;
+    pointer-events: none;
 }
 
 .fbCommandHtmlBox .offScreen {
@@ -120,20 +129,183 @@
 /*************************************************************************************************/
 /* Toolbar */
 
+#fbToolbox {
+    -moz-appearance: none;
+    border: none;
+    border-bottom: 1px solid rgba(10, 31, 51, 0.35);
+    background-image: linear-gradient(rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.2));
+}
+
 #fbToolbar {
-    padding-left: 4px;
+    -moz-appearance: none;
+    padding: 0 0 0 4px;
+    border: none;
 }
 
 #fbToolbarInner {
+    -moz-box-flex: 1;
+    -moz-box-align: center;
     overflow: hidden;
+    padding: 1px 0;
+    height: calc(20rem + 7px);
+}
+
+#fbToolbarInner > hbox {
+    -moz-box-align: center;
+}
+
+#fbToolbarInner > hbox {
+    -moz-box-align: center;
+}
+
+.panelTabBox {
+    height: calc(20rem + 8px);
+    padding: 0;
+    overflow: hidden;
+}
+
+#fbPanelBar2-panelTabs {
+    padding-left: 5px;
+}
+
+#fbPanelBar1-tabBoxBackground,
+#fbPanelBar2-tabBoxBackground {
+    border-bottom: 1px solid #A0A0A0;
+}
+
+#fbPanelBar1-tabBoxBackground {
+    background-color: -moz-dialog;
+}
+
+#fbPanelBar2-tabBoxBackground {
+    background-color: rgb(252, 252, 252);
+    background: linear-gradient(rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.2));
+}
+
+#fbPanelBar2-panelTabs > panelTab[selected="true"] {
+    background-color: white;
+    border-bottom: 1px solid white;
+}
+
+/*************************************************************************************************/
+/* Toolbar buttons */
+
+#fbPanelBar1-buttons toolbarbutton {
+    width: 26px;
+    height: 26px;
+    margin: 1px 3px 1px 0;
+    padding: 0px;
+    padding-top: 4px;
+    padding-bottom: 2px;
+    -moz-padding-start: 4px;
+    -moz-padding-end: 2px;
+}
+
+#fbPanelBar1-buttons #fbNavigateBackButton {
+    margin-right: 0;
+}
+
+#fbBreakOnNextButton,
+.toolbar-image-button {
+    width: 23px;
+    height: 23px;
+    padding: 1px;
+}
+
+.toolbarbutton-menu-dropmarker {
+    padding: 3px 7px;
+}
+
+/*************************************************************************************************/
+/* Panel Tabs */
+
+panelTab {
+    margin: 1px 0 0 0;
+    border: 1px solid transparent;
+    border-radius: 4px 4px 0 0;
+    padding: 5px 7px 3px 7px;
+    font-size: 11px;
+    font-weight: bold;
+    color: #565656;
+    direction: ltr;
+}
+
+panelTab[selected="true"] {
+    border: 1px solid #A0A0A0;
+    border-bottom: 1px solid rgb(253, 253, 253);
+    background-color: rgb(253, 253, 253);
+    color: inherit;
+}
+
+panelTab:not([selected="true"]):hover {
+    border: 1px solid #C8C8C8;
+    border-bottom: 1px solid transparent;
+    backround-color: transparent;
+}
+
+panelTab[selected="true"] > panelTabMenu .menuTarget,
+panelTab:focus > panelTabMenu .menuTarget {
+    background: url(chrome://firebug/skin/win/optionsMenuTarget.svg) no-repeat center;
+    width: 11px;
+    height: 10px;
+    vertical-align: middle;
+    visibility: visible;
+}
+
+panelTab[selected="true"]:hover > panelTabMenu .menuTarget {
+    background-image: url(chrome://firebug/skin/win/optionsMenuTargetHover.svg);
+}
+
+/* Panel tab is directly joined with the content (no inner toolbar) if the panel is disabled */
+panelTab[selected="true"][disabled="true"] {
+    background-color: white;
+    border-bottom-color: white;
+}
+
+/************************************************************************************************/
+
+#fbPanelSplitter {
+    background-color: rgb(221,221,221) !important;
+    border: none;
+    min-width: 5px;
+    max-width: 5px;
+}
+
+#fbPanelSplitter[orient="vertical"] {
+    min-height: 5px;
+    max-height: 5px;
+    min-width: 0;
+    max-width: none;
+}
+
+#fbPanelSplitter > #fbPanelSplitterBox {
+    visibility: visible;
+    height: calc(20rem + 8px);
+    width: 6px;
+    background-color: -moz-dialog;
+    background-image: linear-gradient(rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.2));
+    border-bottom: 1px solid #A0A0A0;
+    cursor: default;
+    margin: 0;
+    padding: 1px 0;
+}
+
+#fbPanelSplitter[orient=vertical] > #fbPanelSplitterBox {
+    visibility: hidden;
+}
+
+#fbCommandPopupSplitter {
+    background-color: rgb(221,221,221) !important;
+    border: none;
+    min-height: 5px;
+    max-height: 5px;
 }
 
 /*************************************************************************************************/
 /* Search Box */
 
 #fbSearchBox {
-    margin-left: 0;
-    margin-right: 6px;
+    margin: 3px 10px 3px 0;
     min-width: 100px;
 }
 
@@ -150,57 +322,70 @@
 
 .fbsearch-textbox {
     -moz-appearance: none;
-    margin: 0 0px 1px 2px;
-    border: 1px solid;
-    border-radius: 5px;  /* Matched to the a11y outline impl */
-    -moz-border-top-colors: #96969D;
-    -moz-border-right-colors: #96969D;
-    -moz-border-bottom-colors: #96969D;
-    -moz-border-left-colors: #96969D;
+    -moz-box-align: center;
+    margin: 0;
+    border: 1px solid #96969D;
+    border-radius: 2px 0 0 2px;
     font: message-box;
     font-size: 11px;
     font-size-adjust: inherit;
     direction: ltr;
+    height: 21px;
+    padding: 0 2px 0 4px;
 }
 
 .fbsearch-icon {
-    cursor: default!important;
-    background: url(chrome://firebug/skin/search.svg) no-repeat 0 50%;
+    cursor: default !important;
+    background: url(chrome://firebug/skin/search.svg) no-repeat 0 0;
     width: 16px;
     height: 16px;
 }
 
-/* Need to use images instead of filters due to https://bugzil.la/891777 */ 
+.fbsearch-textbox[active-search="true"] > .fbsearch-icon {
+    background-image: url(chrome://firebug/skin/searchCancel.svg);
+}
+
 .fbsearch-icon:hover {
-    background: url(chrome://firebug/skin/searchHovered.svg) no-repeat 0 50%;
+    filter: url(resource://firebugui/filters.svg#darken);
 }
 
 .fbsearch-icon:active {
-    background: url(chrome://firebug/skin/searchPressed.svg) no-repeat 0 50%;
-}
-
-.fbsearch-textbox[active-search="true"] > .fbsearch-icon {
-    background-image: url(chrome://firebug/skin/searchClose.svg);
-}
-
-.fbsearch-textbox[active-search="true"] > .fbsearch-icon:hover {
-    background-image: url(chrome://firebug/skin/searchCloseHovered.svg);
-}
-
-.fbsearch-textbox[active-search="true"] > .fbsearch-icon:active {
-    background-image: url(chrome://firebug/skin/searchClosePressed.svg);
+    filter: url(resource://firebugui/filters.svg#deepDarken);
 }
 
 #fbSearchOptionsPanel {
-
-}
-
-.fbsearch-options-label {
-
+    font-size: 11px;
 }
 
 .fbsearch-options-buttons {
+    -moz-appearance: none;
+    margin: 0;
+    border: 1px solid ThreeDShadow;
+    border-radius: 0;
+    padding: 1px 5px;
+    line-height: 1em;
+    width: 22px;
+    height: 21px;
+}
 
+.fbsearch-options-buttons.prev {
+    list-style-image: url("chrome://firebug/skin/searchPrevious.svg");
+    border-left: none;
+}
+
+.fbsearch-options-buttons.next {
+    list-style-image: url("chrome://firebug/skin/searchNext.svg");
+    border-radius: 0 2px 2px 0;
+    border-left: none;
+}
+
+.fbsearch-options-buttons:hover {
+    filter: url(resource://firebugui/filters.svg#darken);
+}
+
+.fbsearch-options-buttons:active {
+    box-shadow: 0 1px 2px rgba(10,31,51,.2) inset;
+    filter: url(resource://firebugui/filters.svg#deepDarken);
 }
 
 textbox[type="fbSearchBox"] > panel {
@@ -223,6 +408,11 @@ textbox[type="fbSearchBox"] > panel {
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 /* Case sensitive/insensitive search */
 
+#fbSearchBoxIsSensitive,
+#fbSearchBoxIsNotSensitive {
+    padding-bottom: 8px;
+}
+
 #fbSearchBoxIsSensitive {
     display: none;
 }
@@ -244,15 +434,6 @@ textbox[type="fbSearchBox"] > panel {
 }
 
 /*************************************************************************************************/
-
-.toolbar-image-button {
-}
-
-.toolbar-image-button > .toolbarbutton-icon {
-}
-
-.toolbar-image-button > .toolbarbutton-text {
-}
 
 .fbURLMenuItem { /* let file names be as long as need be */
     max-width: none;
@@ -289,111 +470,49 @@ textbox[type="fbSearchBox"] > panel {
     list-style-image: url(chrome://firebug/skin/rerun.svg);
 }
 
-/* Need to use images instead of filters due to https://bugzil.la/886883 */ 
-#fbRerunButton:hover {
-    list-style-image: url(chrome://firebug/skin/rerunHovered.svg);
-}
-
-#fbRerunButton:active {
-    list-style-image: url(chrome://firebug/skin/rerunPressed.svg);
-}
-
-#fbRerunButton[disabled=true] {
-    list-style-image: url(chrome://firebug/skin/rerunDisabled.svg);
-}
-
 #fbContinueButton {
     list-style-image: url(chrome://firebug/skin/continue.svg);
-}
-
-#fbContinueButton:hover {
-    list-style-image: url(chrome://firebug/skin/continueHovered.svg);
-}
-
-#fbContinueButton:active {
-    list-style-image: url(chrome://firebug/skin/continuePressed.svg);
-}
-
-#fbContinueButton[disabled=true] {
-    list-style-image: url(chrome://firebug/skin/continueDisabled.svg);
 }
 
 #fbStepOverButton {
     list-style-image: url(chrome://firebug/skin/stepOver.svg);
 }
 
-#fbStepOverButton:hover {
-    list-style-image: url(chrome://firebug/skin/stepOverHovered.svg);
-}
-
-#fbStepOverButton:active {
-    list-style-image: url(chrome://firebug/skin/stepOverPressed.svg);
-}
-
-#fbStepOverButton[disabled=true] {
-    list-style-image: url(chrome://firebug/skin/stepOverDisabled.svg);
-}
-
 #fbStepIntoButton {
     list-style-image: url(chrome://firebug/skin/stepInto.svg);
-}
-
-#fbStepIntoButton:hover {
-    list-style-image: url(chrome://firebug/skin/stepIntoHovered.svg);
-}
-
-#fbStepIntoButton:active {
-    list-style-image: url(chrome://firebug/skin/stepIntoPressed.svg);
-}
-
-#fbStepIntoButton[disabled=true] {
-    list-style-image: url(chrome://firebug/skin/stepIntoDisabled.svg);
 }
 
 #fbStepOutButton {
     list-style-image: url(chrome://firebug/skin/stepOut.svg);
 }
 
-#fbStepOutButton:hover {
-    list-style-image: url(chrome://firebug/skin/stepOutHovered.svg);
-}
-
-#fbStepOutButton:active {
-    list-style-image: url(chrome://firebug/skin/stepOutPressed.svg);
-}
-
-#fbStepOutButton[disabled=true] {
-    list-style-image: url(chrome://firebug/skin/stepOutDisabled.svg);
-}
-
-/*************************************************************************************************/
-/* Script history buttons */
-
-#fbNavigateBackButton,
-#fbNavigateForwardButton,
-.navigationHistoryMenuItemForward,
-.navigationHistoryMenuItemBack {
-    -moz-image-region: rect(0, 16px, 16px, 0);
-}
-
-#fbNavigateBackButton:hover,
-#fbNavigateForwardButton:hover,
-.navigationHistoryMenuItemBack:hover,
-.navigationHistoryMenuItemForward:hover {
+:-moz-any(#fbRerunButton,
+          #fbContinueButton,
+          #fbStepOverButton,
+          #fbStepIntoButton,
+          #fbStepOutButton):hover {
     filter: url(resource://firebugui/filters.svg#darken);
 }
 
-#fbNavigateBackButton:active,
-#fbNavigateForwardButton:active,
-.navigationHistoryMenuItemBack:active,
-.navigationHistoryMenuItemForward:active {
+:-moz-any(#fbRerunButton,
+          #fbContinueButton,
+          #fbStepOverButton,
+          #fbStepIntoButton,
+          #fbStepOutButton):active {
     filter: url(resource://firebugui/filters.svg#deepDarken);
 }
 
-#fbNavigateBackButton[disabled="true"],
-#fbNavigateForwardButton[disabled="true"] {
-    filter: url(resource://firebugui/filters.svg#brightenedGrayscale);
+:-moz-any(#fbRerunButton,
+          #fbContinueButton,
+          #fbStepOverButton,
+          #fbStepIntoButton,
+          #fbStepOutButton)[disabled=true] {
+    filter: url(resource://firebugui/filters.svg#grayscale);
 }
+
+
+/*************************************************************************************************/
+/* Script history buttons */
 
 #fbNavigateBackButton:-moz-locale-dir(ltr),
 #fbNavigateForwardButton:-moz-locale-dir(rtl),
@@ -409,14 +528,42 @@ textbox[type="fbSearchBox"] > panel {
     list-style-image: url(chrome://firebug/skin/navigationForward.svg);
 }
 
+:-moz-any(#fbNavigateBackButton,
+          #fbNavigateForwardButton,
+          .navigationHistoryMenuItemBack,
+          .navigationHistoryMenuItemForward):hover {
+    filter: url(resource://firebugui/filters.svg#darken);
+}
+
+:-moz-any(#fbNavigateBackButton,
+          #fbNavigateForwardButton,
+          .navigationHistoryMenuItemBack,
+          .navigationHistoryMenuItemForward):active {
+    filter: url(resource://firebugui/filters.svg#deepDarken);
+}
+
+:-moz-any(#fbNavigateBackButton,
+          #fbNavigateForwardButton)[disabled="true"] {
+    filter: url(resource://firebugui/filters.svg#brightenedGrayscale);
+}
+
 .navigationHistoryMenuItemCurrent {
     font-weight: bold;
 }
 
 /*************************************************************************************************/
+/* Command Line Popup */
 
 #fbCommandPopupButton {
     list-style-image: url(chrome://firebug/skin/commandLinePopup.svg);
+}
+
+#fbCommandPopupButton:hover {
+    filter: url(resource://firebugui/filters.svg#darken);
+}
+
+#fbCommandPopupButton:active {
+    filter: url(resource://firebugui/filters.svg#deepDarken);
 }
 
 #fbCommandPopupButton[disabled="true"] {
@@ -442,16 +589,92 @@ textbox[type="fbSearchBox"] > panel {
 }
 
 /*************************************************************************************************/
-
-#fbBreakOnErrors {
-    list-style-image: url(chrome://firebug/skin/breakErrors.png);
+/* Buttons */
+toolbarbutton {
+    -moz-appearance: none;
+    margin-right: 1px;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    color: #141414;
 }
 
-#fbBreakOnErrors[checked="true"] {
-    list-style-image: url(chrome://firebug/skin/breakErrorsOn.png);
+toolbarbutton:hover:not([disabled="true"]) {
+    border-color: rgba(0, 0, 0, 0.2);
+    background: transparent linear-gradient(rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.2)) no-repeat;
+    box-shadow: 1px 1px 1px rgba(255, 255, 255, 0.6) inset, 0 0 1px rgba(255, 255, 255, 0.6) inset, 0 0 2px rgba(0, 0, 0, 0.05);
+}
+
+toolbarbutton:-moz-any([checked="true"],
+                       [selected="true"],
+                       [open="true"]):not(.panelStatusLabel):not([disabled="true"]) {
+    border-color: rgba(0, 0, 0, 0.3);
+    box-shadow: 1px 1px 1px rgba(0, 0, 0, 0.1) inset, 0 0 1px rgba(0, 0, 0, 0.1) inset;
+}
+
+toolbarbutton:-moz-any([checked="true"],
+                       [selected="true"],
+                       [open="true"]):not(.panelStatusLabel):not([disabled="true"]):not([type=menu-button]) {
+    background-image: linear-gradient(rgba(0, 0, 0, 0.1), transparent);
+    background-repeat: no-repeat;
+}
+
+toolbarbutton:hover:active:not([disabled="true"]) {
+    border-color: rgba(0, 0, 0, 0.3);
+    box-shadow: 1px 1px 1px rgba(0, 0, 0, 0.1) inset, 0 0 1px rgba(0, 0, 0, 0.1) inset, 0 0 2px rgba(0, 0, 0, 0.05);
+}
+
+toolbarbutton:hover:active:not([disabled="true"]):not([type=menu-button]) {
+    background-image: linear-gradient(rgba(0, 0, 0, 0.2), transparent);
+    background-repeat: no-repeat;
+}
+
+toolbarbutton[type="menu-button"] {
+    padding: 0 !important;
+}
+
+toolbarbutton[type=menu-button] > .toolbarbutton-menubutton-button {
+  -moz-appearance: none;
+  border-radius: 0;
+  padding: 1px 6px;
+  -moz-border-end: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+toolbarbutton[type=menu-button]:hover > .toolbarbutton-menubutton-button {
+  -moz-border-end: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+toolbarbutton[type=menu-button][open="true"]:not([disabled="true"]) > .toolbarbutton-menubutton-dropmarker {
+    border-color: rgba(0, 0, 0, 0.3);
+    background: transparent linear-gradient(rgba(0, 0, 0, 0.1), transparent) no-repeat;
+    box-shadow: 1px 1px 1px rgba(0, 0, 0, 0.1) inset, 0 0 1px rgba(0, 0, 0, 0.1) inset;
+}
+
+toolbarbutton > label,
+toolbarbutton > toolbarbutton {
+    margin: 0;
+    border: none;
+    padding: 0;
+}
+
+toolbarbutton[type="menu"],
+toolbarbutton[type="menu"] > toolbarbutton {
+    padding-right: 0;
+}
+
+toolbarbutton[disabled="true"] {
+    color: graytext;
+}
+
+.panelStatusLabel[selected="true"] {
+    font-weight: bold;
+}
+
+.panelStatusLabel > .toolbarbutton-icon {
+    margin: 0;
 }
 
 /*************************************************************************************************/
+/* Break On ... buttons */
 
 /* default is disabled */
 .fbBreakOnImage {
@@ -459,26 +682,25 @@ textbox[type="fbSearchBox"] > panel {
     padding-right: 2px;
 }
 
-/* images */
 #fbBreakOnNextButton #fbBreakOnImage {
-    list-style-image: url("chrome://firebug/skin/breakOn.svg");
+    list-style-image: url(chrome://firebug/skin/breakOn.svg);
     visibility: visible;
 }
 
-#fbBreakOnNextButton[breakable="true"]:hover #fbBreakOnImage {
+#fbBreakOnNextButton[breakable="true"]:hover .fbBreakOnImage {
     filter: url(resource://firebugui/filters.svg#darken);
 }
 
-#fbBreakOnNextButton[breakable="true"]:active #fbBreakOnImage {
+#fbBreakOnNextButton[breakable="true"]:active .fbBreakOnImage {
     filter: url(resource://firebugui/filters.svg#deepDarken);
 }
 
-#fbBreakOnNextButton #fbBreakOnImageArmed {
-    list-style-image: url("chrome://firebug/skin/breakOnArmed.svg");
+#fbBreakOnImageArmed {
+    list-style-image: url(chrome://firebug/skin/breakOnArmed.svg);
 }
 
 /* disabled */
-#fbBreakOnNextButton[breakable="disabled"] {
+#fbBreakOnNextButton[breakable="disabled"] .fbBreakOnImage {
     filter: url(resource://firebugui/filters.svg#grayscale);
 }
 
@@ -542,56 +764,64 @@ textbox[type="fbSearchBox"] > panel {
 }
 
 /*************************************************************************************************/
+/* Panel Tabs */
+
+panelTab[selected="true"] > panelTabMenu .menuTarget,
+panelTab:focus > panelTabMenu .menuTarget {
+    background: url(chrome://firebug/skin/optionsMenuTarget.svg) no-repeat center;
+    width: 11px;
+    height: 10px;
+    vertical-align: middle;
+    visibility: visible;
+}
+
+panelTab[selected="true"]:hover > panelTabMenu .menuTarget {
+    background-image: url(chrome://firebug/skin/optionsMenuTargetHover.svg);
+}
+
+panelTab[selected="true"]:hover:active > panelTabMenu .menuTarget {
+    filter: url(resource://firebugui/filters.svg#darken);
+}
+
+/*************************************************************************************************/
 /* Toggle Side Panels */
 
-#fbToggleSidePanels {
+.fbToggleSidePanels {
     list-style-image: url(chrome://firebug/skin/collapseSidePanels.svg);
 }
 
-#fbToggleSidePanels:hover {
-    list-style-image: url(chrome://firebug/skin/collapseSidePanelsHovered.svg);
-}
-
-#fbToggleSidePanels:active {
-    list-style-image: url(chrome://firebug/skin/collapseSidePanelsPressed.svg);
-}
-
-#fbToggleSidePanels.closed {
+.fbToggleSidePanels.closed {
     list-style-image: url(chrome://firebug/skin/expandSidePanels.svg);
 }
 
-#fbToggleSidePanels.closed:hover {
-    list-style-image: url(chrome://firebug/skin/expandSidePanelsHovered.svg);
-}
-
-#fbToggleSidePanels.closed:active {
-    list-style-image: url(chrome://firebug/skin/expandSidePanelsPressed.svg);
-}
-
-#fbPanelPane:not([orient="vertical"]) #fbToggleSidePanels {
+#fbPanelPane:not([orient="vertical"]) .fbToggleSidePanels {
     margin-right: 2px;
 }
 
-#fbPanelPane[orient="vertical"] #fbToggleSidePanels {
+#fbPanelPane[orient="vertical"] .fbToggleSidePanels {
     list-style-image: url(chrome://firebug/skin/collapseSidePanelsVertical.svg);
 }
 
-#fbPanelPane[orient="vertical"] #fbToggleSidePanels:hover {
-    list-style-image: url(chrome://firebug/skin/collapseSidePanelsVerticalHovered.svg);
-}
-
-#fbPanelPane[orient="vertical"] #fbToggleSidePanels:active {
-    list-style-image: url(chrome://firebug/skin/collapseSidePanelsVerticalPressed.svg);
-}
-
-#fbPanelPane[orient="vertical"] #fbToggleSidePanels.closed {
+#fbPanelPane[orient="vertical"] .fbToggleSidePanels.closed {
     list-style-image: url(chrome://firebug/skin/expandSidePanelsVertical.svg);
 }
 
-#fbPanelPane[orient="vertical"] #fbToggleSidePanels.closed:hover {
-    list-style-image: url(chrome://firebug/skin/expandSidePanelsVerticalHovered.svg);
+.fbToggleSidePanels:hover {
+    filter: url(resource://firebugui/filters.svg#darken);
 }
 
-#fbPanelPane[orient="vertical"] #fbToggleSidePanels.closed:active {
-    list-style-image: url(chrome://firebug/skin/expandSidePanelsVerticalPressed.svg);
+.fbToggleSidePanels:active {
+    filter: url(resource://firebugui/filters.svg#deepDarken);
+    padding: 3px;
+}
+
+#fbToggleSidePanelsBox,
+#fbToggleSidePanelsBox2 {
+    -moz-box-flex: 1;
+    -moz-box-pack: end;
+}
+
+#fbToggleSidePanelsBox2 {
+    -moz-box-align: center;
+    padding-bottom: 1px;
 }

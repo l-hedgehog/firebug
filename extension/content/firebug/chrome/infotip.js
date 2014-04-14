@@ -1,14 +1,18 @@
 /* See license.txt for terms of usage */
 
 define([
+    "firebug/chrome/module",
     "firebug/lib/object",
     "firebug/firebug",
     "firebug/lib/domplate",
     "firebug/lib/locale",
     "firebug/lib/events",
-    "firebug/lib/dom"
+    "firebug/lib/dom",
+    "firebug/lib/trace",
 ],
-function(Obj, Firebug, Domplate, Locale, Events, Dom) {
+function(Module, Obj, Firebug, Domplate, Locale, Events, Dom, FBTrace) {
+
+"use strict";
 
 // ********************************************************************************************* //
 // Constants
@@ -17,13 +21,16 @@ const infoTipMargin = 10;
 
 // ********************************************************************************************* //
 
-with (Domplate) {
-Firebug.InfoTip = Obj.extend(Firebug.Module,
+var {domplate, DIV} = Domplate;
+
+Firebug.InfoTip = Obj.extend(Module,
 {
     dispatchName: "infoTip",
+
     tags: domplate(
     {
-        infoTipTag: DIV({"class": "infoTip"}),
+        infoTipTag:
+            DIV({"class": "infoTip"}),
     }),
 
     initializeBrowser: function(browser)
@@ -78,7 +85,7 @@ Firebug.InfoTip = Obj.extend(Firebug.Module,
             var panelWidth = htmlElt.clientWidth;
             var panelHeight = htmlElt.clientHeight;
 
-            if (x+infoTip.offsetWidth+infoTipMargin > panelWidth)
+            if (x + infoTip.offsetWidth + infoTipMargin > panelWidth)
             {
                 infoTip.style.left = Math.max(0, panelWidth -
                     (infoTip.offsetWidth + infoTipMargin)) + "px";
@@ -86,29 +93,31 @@ Firebug.InfoTip = Obj.extend(Firebug.Module,
             }
             else
             {
-                infoTip.style.left = (x+infoTipMargin) + "px";
+                infoTip.style.left = (x + infoTipMargin) + "px";
                 infoTip.style.right = "auto";
             }
 
-            if (y+infoTip.offsetHeight+infoTipMargin > panelHeight)
+            if (y + infoTip.offsetHeight + infoTipMargin > panelHeight)
             {
                 infoTip.style.top = Math.max(0, panelHeight -
-                    (infoTip.offsetHeight+infoTipMargin)) + "px";
+                    (infoTip.offsetHeight + infoTipMargin)) + "px";
                 infoTip.style.bottom = "auto";
             }
             else
             {
-                infoTip.style.top = (y+infoTipMargin) + "px";
+                infoTip.style.top = (y + infoTipMargin) + "px";
                 infoTip.style.bottom = "auto";
             }
 
             if (FBTrace.DBG_INFOTIP)
+            {
                 FBTrace.sysout("infotip.showInfoTip; top: " + infoTip.style.top +
                     ", left: " + infoTip.style.left + ", bottom: " + infoTip.style.bottom +
                     ", right:" + infoTip.style.right + ", offsetHeight: " + infoTip.offsetHeight +
                     ", offsetWidth: " + infoTip.offsetWidth +
                     ", x: " + x + ", panelWidth: " + panelWidth +
                     ", y: " + y + ", panelHeight: " + panelHeight);
+            }
 
             infoTip.setAttribute("active", "true");
         }
@@ -173,7 +182,6 @@ Firebug.InfoTip = Obj.extend(Firebug.Module,
         this.showPanel(browser, panel);
     }
 });
-};
 
 // ********************************************************************************************* //
 // Registration

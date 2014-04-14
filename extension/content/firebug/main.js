@@ -13,7 +13,7 @@ var prefDomain = "extensions.firebug";
 // xxxHonza: I am getting the following exception sometimes:
 // Console Firebug.getModuleLoaderConfig is not a function"
 // This could be be the reason why users can't open Firebug even if clicking on the start button.
-// Looks like 'moduleConfig.js' is not loaded yet?
+// Looks like 'moduleConfig.js' is not loaded yet? (reported as Issue 6731)
 if (typeof(Firebug.getModuleLoaderConfig) != "function")
 {
     FBTrace.sysout("main; ERROR Firebug.getModuleLoaderConfig is not a function!");
@@ -151,6 +151,13 @@ function onModulesLoaded(ChromeFactory, FBL, Firebug, Browser)
     // in the future (if possible). Global 'require' could collide with other
     // extensions.
     Firebug.connection = new Browser();  // prepare for addListener calls
+
+    // xxxHonza: BTI refactoring suggestions: 
+    // 1) The connection is an object that ensures sending and receiving packets
+    // 2) The current Firebug.connection should be renamed to Firebug.proxy
+    // 3) The BTI Browser should be renamed to BrowserProxy
+    // 4) The connection should be within the proxy: Firebug.proxy.connection
+    Firebug.proxy = Firebug.connection;
 
     Browser.onDebug = function()
     {

@@ -4,9 +4,12 @@ define([
     "firebug/lib/trace",
     "firebug/lib/options",
     "firebug/lib/deprecated",
-    "firebug/lib/xpcom"
+    "firebug/lib/xpcom",
+    "firebug/lib/system",
 ],
-function(FBTrace, Options, Deprecated, Xpcom) {
+function(FBTrace, Options, Deprecated, Xpcom, System) {
+
+"use strict";
 
 // ********************************************************************************************* //
 // Constants
@@ -369,9 +372,9 @@ Str.escapeForCss = createSimpleEscape("css", "normal");
 Str.deprecateEscapeHTML = createSimpleEscape("text", "normal");
 Str.deprecatedUnescapeHTML = createSimpleEscape("text", "reverse");
 
-Str.escapeHTML = Deprecated.deprecated("use appropriate escapeFor... function",
+Str.escapeHTML = Deprecated.method("use appropriate escapeFor... function",
     Str.deprecateEscapeHTML);
-Str.unescapeHTML = Deprecated.deprecated("use appropriate unescapeFor... function",
+Str.unescapeHTML = Deprecated.method("use appropriate unescapeFor... function",
     Str.deprecatedUnescapeHTML);
 
 var escapeForSourceLine = Str.escapeForSourceLine = createSimpleEscape("text", "normal");
@@ -424,7 +427,7 @@ Str.cropString = function(text, limit, alterText)
         alterText = "...";
 
     // Make sure it's a string.
-    text = text + "";
+    text = String(text);
 
     // Use default limit if necessary.
     if (!limit)
@@ -449,7 +452,7 @@ Str.cropStringEx = function(text, limit, alterText, pivot)
         alterText = "...";
 
     // Make sure it's a string.
-    text = text + "";
+    text = String(text);
 
     // Use default limit if necessary.
     if (!limit)
@@ -491,10 +494,10 @@ Str.cropStringEx = function(text, limit, alterText, pivot)
 
 Str.lineBreak = function()
 {
-    if (navigator.appVersion.indexOf("Win") != -1)
+    if (System.isWin(window))
         return "\r\n";
 
-    if (navigator.appVersion.indexOf("Mac") != -1)
+    if (System.isMac(window))
         return "\r";
 
     return "\n";
@@ -688,7 +691,9 @@ Str.toFixedLocaleString = function(number, decimals)
     return formattedNumber;
 };
 
-Str.formatNumber = Deprecated.deprecated("use <number>.toLocaleString() instead",
+// xxxsz: May be refactored when Firefox implements the ECMAScript Internationalization API
+// See https://bugzil.la/853301
+Str.formatNumber = Deprecated.method("use <number>.toLocaleString() instead",
     function(number) { return number.toLocaleString(); });
 
 Str.formatSize = function(bytes)
@@ -853,6 +858,34 @@ Str.formatIP = function(address, port)
     return result;
 };
 
+/**
+ * Capitalizes the first letter of a string or each word in it
+ *
+ * @param {String} string String to format
+ * @param {Boolean} [capitalizeEachWord=false] If true, the first character of each word will be
+ *     transformed to uppercase, otherwise only the very first character of the string
+ * @param {Boolean} [restToLowerCase=true] If true, the rest of the string will be transformed
+ *     to lower case, otherwise it will stay untouched
+ * @returns {String} Converted string
+ */
+Str.capitalize = function(string, capitalizeEachWord, restToLowerCase)
+{
+    function capitalizeFirstLetter(string)
+    {
+        var rest = string.slice(1);
+
+        if (restToLowerCase !== false)
+            rest = rest.toLowerCase();
+
+        return string.charAt(0).toUpperCase() + rest;
+    }
+
+    if (!capitalizeEachWord)
+        return capitalizeFirstLetter(string, restToLowerCase);
+
+    return string.split(" ").map(capitalizeFirstLetter).join(" ");
+};
+
 // ********************************************************************************************* //
 // Conversions
 
@@ -930,6 +963,13 @@ Str.safeToString = function(ob)
     }
     return "[unsupported: no toString() function in type "+typeof(ob)+"]";
 };
+
+// ********************************************************************************************* //
+
+Str.capitalize = function(string)
+{
+    return string.charAt(0).toUpperCase() + string.slice(1);
+}
 
 // ********************************************************************************************* //
 

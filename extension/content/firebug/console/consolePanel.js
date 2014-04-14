@@ -1,31 +1,45 @@
 /* See license.txt for terms of usage */
 
 define([
-    "firebug/lib/object",
     "firebug/firebug",
+    "firebug/lib/trace",
+    "firebug/lib/object",
     "firebug/lib/domplate",
-    "firebug/chrome/reps",
     "firebug/lib/locale",
     "firebug/lib/events",
     "firebug/lib/css",
     "firebug/lib/dom",
     "firebug/lib/search",
-    "firebug/chrome/menu",
     "firebug/lib/options",
-    "firebug/console/commands/profiler",
-    "firebug/chrome/searchBox"
+    "firebug/lib/wrapper",
+    "firebug/lib/xpcom",
+    "firebug/chrome/menu",
+    "firebug/chrome/reps",
+    "firebug/chrome/searchBox",
+    "firebug/chrome/panelNotification",
+    "firebug/chrome/activablePanel",
+    "firebug/console/commandLine",
+    "firebug/console/errorMessageObj",
+    "firebug/debugger/debuggerLib",
+    "firebug/debugger/breakpoints/breakpointStore",
 ],
-function(Obj, Firebug, Domplate, FirebugReps, Locale, Events, Css, Dom, Search, Menu, Options) {
+function(Firebug, FBTrace, Obj, Domplate, Locale, Events, Css, Dom, Search, Options, Wrapper,
+    Xpcom, Menu, FirebugReps, SearchBox, PanelNotification, ActivablePanel, CommandLine,
+    ErrorMessageObj, DebuggerLib, BreakpointStore) {
 
-with (Domplate) {
+"use strict";
+
+// ********************************************************************************************* //
+// Resources
+
+// Firebug wiki: https://getfirebug.com/wiki/index.php/Console_Panel
 
 // ********************************************************************************************* //
 // Constants
 
-var reAllowedCss = /^(-moz-)?(background|border|color|font|line|margin|padding|text)/;
+var {domplate, DIV, SPAN, TD, TR, TABLE, TBODY} = Domplate;
 
-const Cc = Components.classes;
-const Ci = Components.interfaces;
+var reAllowedCss = /^(-moz-)?(background|border|color|font|line|margin|padding|text)/;
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -46,12 +60,26 @@ const logTypes =
     "spy": 1
 };
 
+var Trace = FBTrace.to("DBG_CONSOLE");
+var TraceError = FBTrace.toError();
+
 // ********************************************************************************************* //
+// ConsolePanel Implementation
 
-Firebug.ConsolePanel = function () {};
-
-Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
+/**
+ * @panel This object represents the Console panel.
+ */
+function ConsolePanel()
 {
+}
+
+ConsolePanel.prototype = Obj.extend(ActivablePanel,
+/** @lends ConsolePanel */
+{
+    dispatchName: "ConsolePanel",
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
     template: domplate(
     {
         logRowTag:
@@ -62,11 +90,28 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
                         SPAN({"class": "logCounterValue"})
                     )
                 )
-            )
+            ),
+
+        limitTag:
+            DIV({"class": "panelNotificationBox collapsed"},
+                TABLE({width: "100%", cellpadding: 0, cellspacing: 0},
+                    TBODY(
+                        TR(
+                            TD({"class": "consolPanelNotification"})
+                        )
+                    )
+                )
+            ),
     }),
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
     // Members
+
+    name: "console",
+    searchable: true,
+    breakable: true,
+    editable: false,
+    enableA11y: true,
 
     wasScrolledToBottom: false,
     messageCount: 0,
@@ -76,23 +121,33 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
     order: 10,
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-    // extends Panel
-
-    name: "console",
-    searchable: true,
-    breakable: true,
-    editable: false,
-    enableA11y: true,
 
     initialize: function()
     {
-        Firebug.ActivablePanel.initialize.apply(this, arguments);  // loads persisted content
+        // Loads persisted content.
+        ActivablePanel.initialize.apply(this, arguments);
+
+        this.filterMatchSet = [];
 
         if (!this.persistedContent && Firebug.Console.isAlwaysEnabled())
             this.insertLogLimit(this.context);
 
+        // Update visibility of stack frame arguments.
+        var name = "showStackFrameArguments";
+        this.updateOption(name, Options.get(name));
+
+        // The Console panel displays error breakpoints and so, its UI must be updated
+        // when a new error-breakpoint is created or removed. It also listens to
+        // debugger tool to update BON error UI.
+        this.context.getTool("debugger").addListener(this);
+
         // Listen for set filters, so the panel is properly updated when needed
         Firebug.Console.addListener(this);
+
+        Firebug.registerUIListener(this);
+
+        if (Firebug.Console.isEnabled())
+            Firebug.Console.attachConsoleToWindows(this.context);
     },
 
     destroy: function(state)
@@ -104,24 +159,31 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
         if (state)
             state.wasScrolledToBottom = this.wasScrolledToBottom;
 
+        // xxxHonza: could we move this into "firebug/console/commands/profiler" module?
         // If we are profiling and reloading, save the profileRow for the new context
         if (this.context.profileRow && this.context.profileRow.ownerDocument)
         {
             this.context.profileRow.parentNode.removeChild(this.context.profileRow);
             state.profileRow = this.context.profileRow;
+            state.profiling = this.context.profiling;
         }
 
         if (FBTrace.DBG_CONSOLE)
             FBTrace.sysout("console.destroy; wasScrolledToBottom: " +
                 this.wasScrolledToBottom + ", " + this.context.getName());
 
+        this.context.getTool("debugger").removeListener(this);
+
         Firebug.Console.removeListener(this);
-        Firebug.ActivablePanel.destroy.apply(this, arguments);  // must be called last
+
+        Firebug.unregisterUIListener(this);
+
+        ActivablePanel.destroy.apply(this, arguments);  // must be called last
     },
 
     initializeNode: function()
     {
-        Firebug.ActivablePanel.initializeNode.apply(this, arguments);
+        ActivablePanel.initializeNode.apply(this, arguments);
 
         this.onScroller = Obj.bind(this.onScroll, this);
         Events.addEventListener(this.panelNode, "scroll", this.onScroller, true);
@@ -133,7 +195,7 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
 
     destroyNode: function()
     {
-        Firebug.ActivablePanel.destroyNode.apply(this, arguments);
+        ActivablePanel.destroyNode.apply(this, arguments);
 
         if (this.onScroller)
             Events.removeEventListener(this.panelNode, "scroll", this.onScroller, true);
@@ -149,8 +211,10 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
                 " " + this.context.getName(), state);
 
         this.showCommandLine(true);
-        if (Firebug.chrome.hasFocus())
-            Firebug.CommandLine.focus(this.context);
+
+        // Don't steal the focus if the document is not loaded (see issue 6589).
+        if (this.context.window.document.readyState === "complete")
+            CommandLine.focus(this.context);
 
         this.showToolbarButtons("fbConsoleButtons", true);
 
@@ -166,6 +230,7 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
     showPanel: function(state)
     {
         var wasScrolledToBottom;
+
         if (state)
             wasScrolledToBottom = state.wasScrolledToBottom;
 
@@ -188,14 +253,20 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
             FBTrace.sysout("console.show; wasScrolledToBottom: " +
                 this.wasScrolledToBottom + ", " + this.context.getName());
 
-        if (state && state.profileRow) // then we reloaded while profiling
+        // xxxHonza: could we move this into "firebug/console/commands/profiler" module?
+        // then we reloaded while profiling
+        if (state && state.profileRow)
         {
             if (FBTrace.DBG_CONSOLE)
                 FBTrace.sysout("console.show; state.profileRow:", state.profileRow);
 
             this.context.profileRow = state.profileRow;
             this.panelNode.appendChild(state.profileRow);
+
+            this.context.profiling = state.profiling;
+
             delete state.profileRow;
+            delete state.profiling;
         }
     },
 
@@ -215,12 +286,15 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
                 this.wasScrolledToBottom + ", " + this.context.getName());
     },
 
-    shouldBreakOnNext: function()
+    updateOption: function(name, value)
     {
-        // xxxHonza: shouldn't the breakOnErrors be context related?
-        // xxxJJB, yes, but we can't support it because we can't yet tell
-        // which window the error is on.
-        return Options.get("breakOnErrors");
+        if (name == "showStackFrameArguments")
+        {
+            if (value)
+                Css.removeClass(this.panelNode, "hideArguments");
+            else
+                Css.setClass(this.panelNode, "hideArguments");
+        }
     },
 
     getBreakOnNextTooltip: function(enabled)
@@ -264,6 +338,8 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
                 "console.option.tip.Show_Network_Errors"),
             this.getShowStackTraceMenuItem(),
             this.getStrictOptionMenuItem(),
+            Menu.optionMenu("console.option.Group_Log_Messages", "console.groupLogMessages",
+                "console.option.tip.Group_Log_Messages"),
             "-",
             Menu.optionMenu("console.option.Show_Command_Editor", "commandEditor",
                 "console.option.tip.Show_Command_Editor"),
@@ -346,10 +422,10 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
                 else if (type == "warning")
                     classNames = ["warn", "warningMessage"];
 
-                for (var i=0, classNamesLen=classNames.length; i<classNamesLen; ++i)
+                for (var i = 0, classNamesLen = classNames.length; i < classNamesLen; i++)
                 {
                     var logRows = panelNode.getElementsByClassName("logRow-" + classNames[i]);
-                    for (var j=0, len=logRows.length; j<len; ++j)
+                    for (var j = 0, len = logRows.length; j < len; j++)
                     {
                         // Mark the groups, in which the log row is located, also as matched
                         for (var group = Dom.getAncestorByClass(logRows[j], "logRow-group"); group;
@@ -394,7 +470,7 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
 
         var search = new Search.TextSearch(this.panelNode, findRow);
 
-        var logRow = search.find(text, false, Firebug.Search.isCaseSensitive(text));
+        var logRow = search.find(text, false, SearchBox.isCaseSensitive(text));
         if (!logRow)
         {
             Events.dispatch(this.fbListeners, "onConsoleSearchMatchFound", [this, text, []]);
@@ -402,7 +478,7 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
         }
 
         for (; logRow; logRow = search.findNext(undefined, undefined, undefined,
-            Firebug.Search.isCaseSensitive(text)))
+            SearchBox.isCaseSensitive(text)))
         {
             if (this.matchesFilter(logRow))
             {
@@ -425,48 +501,104 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
         return true;
     },
 
-    breakOnNext: function(breaking)
-    {
-        Options.set("breakOnErrors", breaking);
-    },
-
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
     // Console Listeners
 
     onFiltersSet: function(filterTypes)
     {
         this.setFilter(filterTypes);
-        Firebug.Search.update(this.context);
+        SearchBox.update(this.context);
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-    getMessageId: function(object, rep, sourceLink)
+    getMessageMatcher: function(object, appender, className, rep, sourceLink, level)
     {
-        // Firebug internal message objects could provide their own custom ID
-        if (object instanceof Object && typeof(object.getId) == "function")
-            return object.getId();
-
-        // The rep for the object could provide its own custom ID
-        if (rep instanceof Object && typeof(rep.getId) == "function")
-            return rep.getId();
-
-        // object may not be an object
-        if (typeof object != "object")
-            return object + (sourceLink ? sourceLink.href + ":" + sourceLink.line : "");
-
-        // object may be NaN
-        if (object !== object)
-            return "NotANumber";
-
-        // Use all direct properties of the object
-        if (object && (typeof object === "object" || typeof object === "function"))
+        function matchesMetaData(otherAppender, otherClassName, otherRep, otherLink, otherLevel)
         {
-            var id = Obj.getObjHash(object);
-            return id + (sourceLink ? sourceLink.href + ":" + sourceLink.line : "");
+            if (otherAppender !== appender)
+                return false;
+
+            if (otherClassName !== className)
+                return false;
+
+            if (otherRep !== rep || (rep && rep.groupable === false))
+                return false;
+
+            if (otherLevel !== level)
+                return false;
+
+            var currentSourceInfo = (sourceLink ? sourceLink.href + ":" + sourceLink.line +
+                (sourceLink.col ? ":" + sourceLink.col : "") : "");
+            var otherSourceInfo = (otherLink ? otherLink.href + ":" + otherLink.line +
+                (otherLink.col ? ":" + otherLink.col : "") : "");
+            return currentSourceInfo === otherSourceInfo;
         }
 
-        return Obj.getUniqueId().toString();
+        /**
+         * Checks whether two variables are equal.
+         *
+         * @param {*} a First variable to be compared
+         * @param {*} b Second variable to be compared
+         * @returns {Boolean|undefined} True if values are equal, false if not,
+         *     undefined if they are similar
+         */
+        function areEqual(a, b)
+        {
+            if (typeof a === "object" && a !== null)
+                return false;
+
+            if (a === b)
+                return true;
+
+            if (typeof a === "number" && typeof b === "number")
+                return isNaN(a) && isNaN(b);
+
+            return false;
+        }
+
+        return function matchMessage(otherObject, otherAppender, otherClassName, otherRep,
+            otherSourceLink, otherLevel)
+        {
+            try
+            {
+                if (!matchesMetaData(otherAppender, otherClassName, otherRep, otherSourceLink,
+                    otherLevel))
+                {
+                    return false;
+                }
+
+                var str = Object.prototype.toString.call(object);
+                var isArray = (str === "[object Arguments]" || str === "[object Array]");
+                if (isArray && rep !== FirebugReps.Arr)
+                {
+                    // console.log et al.
+                    if (object.length !== otherObject.length)
+                        return false;
+
+                    for (var i=0, len=object.length; i<len; ++i)
+                    {
+                        if (!areEqual(object[i], otherObject[i]))
+                            return false;
+                    }
+
+                    return true;
+                }
+
+                // Internal chrome objects are allowed to implement a custom "getId" function.
+                if (object instanceof Object && "getId" in object)
+                    return ("getId" in otherObject && object.getId() === otherObject.getId());
+
+                return areEqual(object, otherObject);
+            }
+            catch (exc)
+            {
+                if (FBTrace.DBG_CONSOLE)
+                    FBTrace.sysout("consolePanel.getMessageMatcher; failed to check equality", exc);
+
+                return false;
+            }
+        };
     },
 
     increaseRowCount: function(row)
@@ -474,11 +606,9 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
         var counter = row.getElementsByClassName("logCounter").item(0);
         if (!counter)
             return;
-        var value = counter.getElementsByClassName("logCounterValue");
+        var value = counter.getElementsByClassName("logCounterValue").item(0);
         if (!value)
             return;
-
-        value = value.item(0);
 
         var count = parseInt(value.textContent);
         if (isNaN(count))
@@ -499,44 +629,45 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
         }
         else
         {
-            var msgId = this.getMessageId(objects, rep, sourceLink);
+            row = this.createRow("logRow", className);
+            var logContent = row.getElementsByClassName("logContent").item(0);
+            appender.apply(this, [objects, logContent, rep]);
 
-            if (msgId && msgId == this.lastMsgId)
+            // If sourceLink is not provided and the object is an instance of Error
+            // convert it into ErrorMessageObj instance, which implements getSourceLink
+            // method.
+            // xxxHonza: is there a better place where to make this kind of conversion?
+            if (!sourceLink && (objects instanceof Error))
+                objects = FirebugReps.Except.getErrorMessage(objects);
+
+            if (!sourceLink && objects && objects.getSourceLink)
+                sourceLink = objects.getSourceLink();
+
+            if (Options.get("console.groupLogMessages") && this.matchesLastMessage &&
+                this.matchesLastMessage(objects, appender, className, rep, sourceLink,
+                    this.groups ? this.groups.length : 0))
             {
                 this.increaseRowCount(container.lastChild);
-
                 row = container.lastChild;
             }
             else
             {
-                row = this.createRow("logRow", className);
-                row.msgId = msgId;
-                var logContent = row.getElementsByClassName("logContent").item(0);
-                appender.apply(this, [objects, logContent, rep]);
-
-                // If sourceLink is not provided and the object is an instance of Error
-                // convert it into ErrorMessageObj instance, which implements getSourceLink
-                // method.
-                // xxxHonza: is there a better place where to make this kind of conversion?
-                if (!sourceLink && (objects instanceof Error))
-                    objects = FirebugReps.Except.getErrorMessage(objects);
-
-                if (!sourceLink && objects && objects.getSourceLink)
-                    sourceLink = objects.getSourceLink();
-
                 if (sourceLink)
                     FirebugReps.SourceLink.tag.append({object: sourceLink}, row.firstChild);
 
                 container.appendChild(row);
             }
 
-            this.lastMsgId = msgId;
+            this.matchesLastMessage = this.getMessageMatcher(objects, appender, className, rep,
+                sourceLink, this.groups ? this.groups.length : 0);
 
             this.filterLogRow(row, this.wasScrolledToBottom);
 
             if (FBTrace.DBG_CONSOLE)
+            {
                 FBTrace.sysout("console.append; wasScrolledToBottom " + this.wasScrolledToBottom +
                     " " + row.textContent);
+            }
 
             if (this.wasScrolledToBottom)
                 Dom.scrollToBottom(this.panelNode);
@@ -551,6 +682,7 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
         {
             if (FBTrace.DBG_CONSOLE)
                 FBTrace.sysout("ConsolePanel.clear");
+
             Dom.clearNode(this.panelNode);
             this.insertLogLimit(this.context);
 
@@ -560,7 +692,7 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
             // Don't forget to clear opened groups, if any.
             this.groups = null;
 
-            this.lastMsgId = null;
+            this.matchesLastMessage = null;
         }
     },
 
@@ -571,19 +703,20 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
         // entries reaches the limit.
         var row = this.createRow("limitRow");
 
-        var limitInfo = {
+        // Configure the panel notification box.
+        var prefName = Options.prefDomain + ".console.logLimit";
+        var config = {
             totalCount: 0,
-            limitPrefsTitle: Locale.$STRF("LimitPrefsTitle",
-                [Options.prefDomain+".console.logLimit"])
+            prefName: prefName,
+            buttonTooltip: Locale.$STRF("LimitPrefsTitle", [prefName])
         };
 
-        var netLimitRep = Firebug.NetMonitor.NetLimit;
-        var nodes = netLimitRep.createTable(row, limitInfo);
+        var container = this.template.limitTag.replace({}, row);
+        container = container.querySelector(".consolPanelNotification");
 
-        this.limit = nodes[1];
+        this.limit = PanelNotification.render(container, config);
 
-        var container = this.panelNode;
-        container.insertBefore(nodes[0], container.firstChild);
+        this.panelNode.insertBefore(row, this.panelNode.firstChild);
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -713,7 +846,7 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
             var part = parts[i];
             if (part && typeof(part) == "object")
             {
-            	var object = objects[objIndex];
+                var object = objects[objIndex];
                 if (part.type == "%c")
                 {
                     lastStyle = object.toString();
@@ -905,13 +1038,14 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
         if (shouldShow)
         {
             Dom.collapse(Firebug.chrome.$("fbCommandBox"), false);
-            Firebug.CommandLine.setMultiLine(Firebug.commandEditor, Firebug.chrome);
+            CommandLine.setMultiLine(Firebug.commandEditor, Firebug.chrome);
         }
         else
         {
             // Make sure that entire content of the Console panel is hidden when
             // the panel is disabled.
-            Firebug.CommandLine.setMultiLine(false, Firebug.chrome, Firebug.commandEditor);
+            CommandLine.setMultiLine(false, Firebug.chrome, Firebug.commandEditor);
+            CommandLine.blur(this.context);
             Dom.collapse(Firebug.chrome.$("fbCommandBox"), true);
         }
     },
@@ -947,7 +1081,152 @@ Firebug.ConsolePanel.prototype = Obj.extend(Firebug.ActivablePanel,
             return false;
 
         return rep.showInfoTip(infoTip, target, x, y);
-    }
+    },
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+    // DebuggerTool Listener
+
+    onDebuggerPaused: function(context, event, packet)
+    {
+        // Check the packet type, only "exception" is interesting in this case.
+        var type = packet.why.type;
+        if (type != "exception")
+            return;
+
+        if (!this.shouldBreakOnNext() && !Options.get("breakOnExceptions"))
+        {
+            Trace.sysout("consolePanel.onDebuggerPaused; Break on error not active.");
+            return;
+        }
+
+        // Reset the break-on-next-error flag after an exception break happens.
+        // xxxHonza: this is how the other BON implementations work, but we could reconsider it.
+        // Another problem is that the debugger breaks in every frame by default, which
+        // is avoided by reseting of the flag.
+        this.breakOnNext(false);
+
+        // At this point, the BON flag is reset and can't be used anymore in |shouldResumeDebugger|.
+        // So add a custom flag in packet.why so we know that the debugger is paused because of
+        // either the Console's "Break On Next" or the Script's "Break On Exceptions" option.
+        packet.why.fbPauseDueToBONError = true;
+
+        // Get the exception object.
+        var exc = DebuggerLib.getObject(context, packet.why.exception.actor);
+        if (!exc)
+            return;
+
+        Trace.sysout("consolePanel.onDebuggerPaused;", {exc: exc, packet: packet});
+
+        // Convert to known structure, so FirebugReps.ErrorMessage.copyError() works.
+        var error = {
+            message: exc + "",
+            href: exc.fileName,
+            lineNo: exc.lineNumber
+        };
+
+        var lineNo = exc.lineNumber - 1;
+        var url = exc.fileName;
+
+        // Make sure the break notification popup appears.
+        context.breakingCause =
+        {
+            message: error.message,
+            copyAction: Obj.bindFixed(FirebugReps.ErrorMessage.copyError,
+                FirebugReps.ErrorMessage, error),
+
+            skipAction: function addSkipperAndGo()
+            {
+                // Create a breakpoint that never hits, but prevents BON for the error.
+                var bp = BreakpointStore.addBreakpoint(url, lineNo);
+                BreakpointStore.disableBreakpoint(url, lineNo);
+
+                Firebug.Debugger.resume(context);
+            },
+        };
+    },
+
+    shouldResumeDebugger: function(context, event, packet)
+    {
+        var type = packet.why.type;
+        if (type != "exception")
+            return false;
+
+        // Get the exception object.
+        var exc = DebuggerLib.getObject(context, packet.why.exception.actor);
+        if (!exc)
+            return false;
+
+        // If 'Break On Exceptions' or 'Break On All Errors' are not set, ignore (return true).
+        // Otherwise, don't resume the debugger. The user wants to break and see
+        // where the error happens.
+        if (!packet.why.fbPauseDueToBONError)
+        {
+            Trace.sysout("consolePanel.shouldResumeDebugger; Do not break, " +
+                "packet.why.fbPauseDueToBONError == false");
+            return true;
+        }
+
+        if (BreakpointStore.isBreakpointDisabled(exc.fileName, exc.lineNumber - 1))
+        {
+            Trace.sysout("consolePanel.shouldResumeDebugger; Do not break, disabled BP found.");
+            return true;
+        }
+
+        var preview = packet.why.exception.preview;
+        if (!preview)
+        {
+            TraceError.sysout("consolePanel.shouldResumeDebugger; ERROR preview info isn't" +
+                "available for the exception", packet);
+            return false;
+        }
+
+        // This is to avoid repeated break-on-error in every frame when an error happens.
+        // Break only if the original location of the exception is the same as the
+        // location of the current frame.
+        if (preview.lineNumber != packet.frame.where.line)
+        {
+            Trace.sysout("consolePanel.shouldResumeDebugger; Do not break, we did already");
+            return true;
+        }
+
+        return false;
+    },
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+    // Break On Error
+
+    shouldBreakOnNext: function()
+    {
+        return this.context.breakOnErrors;
+    },
+
+    breakOnNext: function(breaking, callback)
+    {
+        Trace.sysout("consolePanel.breakOnNext;");
+
+        this.context.breakOnErrors = breaking;
+
+        // Set the flag on the server.
+        var tool = this.context.getTool("debugger");
+        tool.updateBreakOnErrors(callback);
+    },
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+    // UI Listener
+
+    updateSidePanels: function(panel)
+    {
+        if (!panel || panel.name != "console")
+            return;
+
+        // Custom update of the side panel box visibility.
+        // The logic in {@FirebugChrome.syncSidePanels} hides the side box (fbPanelBar2)
+        // if there is no selected panel. But in case of the Console (main) panel the
+        // fbPanelBar2.selectedSide panel is null even if the {@CommandEditor} is active.
+        // This is because {@CommandEditor} is not implemented as an instance of {@Firebug.Panel}
+        // So, make sure to display it now.
+        this.showCommandLine(true);
+    },
 });
 
 // ********************************************************************************************* //
@@ -1005,9 +1284,12 @@ function parseFormat(format)
 // ********************************************************************************************* //
 // Registration
 
-Firebug.registerPanel(Firebug.ConsolePanel);
+Firebug.registerPanel(ConsolePanel);
 
-return Firebug.ConsolePanel;
+// xxxHonza: backward compatibility
+Firebug.ConsolePanel = ConsolePanel;
+
+return ConsolePanel;
 
 // ********************************************************************************************* //
-}});
+});

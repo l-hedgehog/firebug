@@ -1,7 +1,5 @@
 function runTest()
 {
-    FBTest.sysout("formatTime.START");
-
     var testValues = [
         {expected: "0ms", value: 0},
         {expected: "123ms", value: 123},
@@ -62,10 +60,10 @@ function runTest()
             msg += " (" + params + ")";
         }
         msg += " must match expected format";
-            
+
         FBTest.compare(value.expected, FW.FBL.formatTime(value.value, value.minUnit, value.maxUnit,
                 value.decimalPlaces), msg);
     }
 
-    FBTest.testDone("formatTime.DONE");
+    FBTest.testDone();
 }

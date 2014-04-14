@@ -17,16 +17,15 @@
         <command id="cmd_firebug_toggleQuickInfoBox" oncommand="Firebug.QuickInfoBox.toggleQuickInfoBox()"
                  checked="false"/>
         <command id="cmd_firebug_toggleProfiling" oncommand="Firebug.Profiler.toggleProfiling(Firebug.currentContext)"/>
-        <!-- <command id="cmd_firebug_toggleMemoryProfiling" oncommand="Firebug.MemoryProfiler.toggleProfiling(Firebug.currentContext)"/> -->
         <command id="cmd_firebug_toggleHTMLEditing" oncommand="Firebug.currentContext.getPanel('html').toggleEditing()"/>
         <command id="cmd_firebug_togglecssEditMode" oncommand="Firebug.currentContext.getPanel('stylesheet').toggleEditing()"/>
 
-        <command id="cmd_firebug_focusCommandLine" oncommand="if (!Firebug.currentContext) Firebug.toggleBar(true); Firebug.CommandLine.focus(Firebug.currentContext)"/>
+        <command id="cmd_firebug_focusCommandLine" oncommand="if (!Firebug.currentContext) Firebug.toggleBar(true); Firebug.CommandLine.focus(Firebug.currentContext, {select: true})"/>
         <command id="cmd_firebug_focusFirebugSearch" oncommand="if (Firebug.currentContext) Firebug.Search.onSearchCommand(document);"/>
         <command id="cmd_firebug_focusWatchEditor" oncommand="if (Firebug.currentContext) Firebug.chrome.focusWatch(Firebug.currentContext);"/>
         <command id="cmd_firebug_focusLocation" oncommand="if (Firebug.currentContext) Firebug.chrome.focusLocationList(Firebug.currentContext);"/>
 
-        <command id="cmd_firebug_toggleBreakOn" oncommand="Firebug.chrome.breakOnNext(Firebug.currentContext, event);"/>
+        <command id="cmd_firebug_toggleBreakOn" oncommand="Firebug.BreakOnNext.onToggleBreakOnNext(event);"/>
 
         <command id="cmd_firebug_rerun" oncommand="Firebug.Debugger.rerun(Firebug.currentContext)" disabled="true"/>
         <command id="cmd_firebug_resumeExecution" oncommand="Firebug.Debugger.resume(Firebug.currentContext)" disabled="true"/>
@@ -38,8 +37,8 @@
         <command id="cmd_firebug_previousFirebugTab" oncommand="Firebug.chrome.gotoPreviousTab()"/>
         <command id="cmd_firebug_leftFirebugTab" oncommand="Firebug.chrome.gotoSiblingTab(false)"/>
         <command id="cmd_firebug_rightFirebugTab" oncommand="Firebug.chrome.gotoSiblingTab(true)"/>
-        <command id="cmd_firebug_nextObject" oncommand="Firebug.chrome.gotoNextObject()"/>
-        <command id="cmd_firebug_previousObject" oncommand="Firebug.chrome.gotoNextObject(true)"/>
+        <command id="cmd_firebug_nextObject" oncommand="Firebug.StatusPath.gotoNextObject()"/>
+        <command id="cmd_firebug_previousObject" oncommand="Firebug.StatusPath.gotoNextObject(true)"/>
 
         <command id="cmd_firebug_clearAllBreakpoints" oncommand="Firebug.Debugger.clearAllBreakpoints(Firebug.currentContext)"/>
         <command id="cmd_firebug_breakOnErrors" oncommand="Firebug.Options.togglePref('breakOnErrors')"/>

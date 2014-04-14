@@ -45,7 +45,9 @@ var TestList = domplate(
                 ),
                 TD({"class": "testListCol testUri", onclick: "$onRunTest"},
                     SPAN({"class": "testLink"},
-                        SPAN("$test.uri")
+                        A({title: "$test|getTestTooltip"},
+                            "$test.uri"
+                        )
                     )
                 ),
                 TD({"class": "testListCol testIcon"},
@@ -75,6 +77,11 @@ var TestList = domplate(
     isTodo: function(test)
     {
         return test.category == "fails";
+    },
+
+    getTestTooltip: function(test)
+    {
+        return test.tooltip;
     },
 
     isDisabled: function(test)
@@ -194,6 +201,12 @@ var TestList = domplate(
           command: Obj.bindFixed(this.onRunFromHere, this, test)
         });
 
+        items.push({
+          label: Locale.$STR("fbtest.cmd.Run This Group From Here"),
+          nol10n: true,
+          command: Obj.bindFixed(this.onRunGroupFromHere, this, test)
+        });
+
         var counter = Firebug.getPref(FBTestApp.prefDomain, "runMoreTimes");
         items.push({
           //xxxHonza: doesn't work? label: Locale.$STRF("fbtest.cmd.Run More Times", [counter]),
@@ -275,6 +288,24 @@ var TestList = domplate(
 
         if (FBTrace.DBG_FBTEST)
             FBTrace.sysout("fbtest.onRunFromHere; Number of tests: " + tests.length, tests);
+
+        FBTestApp.TestRunner.runTests(tests);
+    },
+
+    onRunGroupFromHere: function(test)
+    {
+        var group = test.group;
+        var groups = FBTestApp.TestConsole.groups;
+        var groupIndex = groups.indexOf(group);
+
+        var tests = [];
+
+        // Get tests from the clicked one till the end of the parent group.
+        var testIndex = group.tests.indexOf(test);
+        tests.push.apply(tests, group.tests.slice(testIndex));
+
+        if (FBTrace.DBG_FBTEST)
+            FBTrace.sysout("fbtest.onRunGroupFromHere; Number of tests: " + tests.length, tests);
 
         FBTestApp.TestRunner.runTests(tests);
     },

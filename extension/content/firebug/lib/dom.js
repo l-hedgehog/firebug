@@ -23,6 +23,10 @@ var domMappedData = new WeakMap();
 
 Dom.domUtils = Cc["@mozilla.org/inspector/dom-utils;1"].getService(Ci.inIDOMUtils);
 
+// Tracing
+var TraceError = FBTrace.toError();
+var Trace = FBTrace.to("DBG_DOM");
+
 // ********************************************************************************************* //
 // DOM APIs
 
@@ -30,7 +34,7 @@ Dom.getChildByClass = function(node) // ,classname, classname, classname...
 {
     if (!node)
     {
-        FBTrace.sysout("dom.getChildByClass; ERROR, no parent node!");
+        TraceError.sysout("dom.getChildByClass; ERROR, no parent node!");
         return null;
     }
 
@@ -72,6 +76,18 @@ Dom.getAncestorByTagName = function(node, tagName)
     }
 
     return null;
+};
+
+Dom.getTopAncestorByTagName = function(node, tagName)
+{
+    var topNode = node;
+    for (var parent = node; parent; parent = parent.parentNode)
+    {
+        if (parent.localName && parent.tagName.toLowerCase() == tagName)
+            topNode = parent;
+    }
+
+    return topNode;
 };
 
 /* @Deprecated  Use native Firefox: node.getElementsByClassName(names).item(0) */
@@ -158,6 +174,18 @@ Dom.getNonFrameBody = function(elt)
     return (body.localName && body.localName.toUpperCase() === "FRAMESET") ? null : body;
 }
 
+/**
+ * @return {@Boolean} true if the given element is currently attached to the document.
+ */
+Dom.isAttached = function(element)
+{
+    var doc = element.ownerDocument;
+    if (!doc)
+        return false;
+
+    return doc.contains(element);
+};
+
 // ********************************************************************************************* //
 // DOM Modification
 
@@ -169,12 +197,15 @@ Dom.insertAfter = function(newNode, referenceNode)
 
 Dom.addScript = function(doc, id, src)
 {
-    var element = doc.createElementNS("http://www.w3.org/1999/xhtml", "html:script");
+    var element = doc.getElementById(id);
+    if (element)
+        return element;
+
+    element = doc.createElementNS("http://www.w3.org/1999/xhtml", "html:script");
     element.setAttribute("type", "text/javascript");
     element.setAttribute("id", id);
 
-    if (!FBTrace.DBG_CONSOLE)
-        Firebug.setIgnored(element);
+    Firebug.setIgnored(element);
 
     element.textContent = src;
 
@@ -185,11 +216,11 @@ Dom.addScript = function(doc, id, src)
     else
     {
         // See issue 1079, the svg test case gives this error
-        if (FBTrace.DBG_ERRORS)
-            FBTrace.sysout("lib.addScript doc has no documentElement (" +
-                doc.readyState + ") " + doc.location, doc);
+        TraceError.sysout("dom.addScript; ERROR doc has no documentElement (" +
+            doc.readyState + ") " + doc.location, doc);
         return;
     }
+
     return element;
 };
 
@@ -253,7 +284,7 @@ Dom.collapse = function(elt, collapsed)
 {
     if (!elt)
     {
-        FBTrace.sysout("Dom.collapse; ERROR null element.");
+        TraceError.sysout("dom.collapse; ERROR null element.");
         return;
     }
 
@@ -399,6 +430,7 @@ Dom.findNext = function(node, criteria, upOnly, maxRoot)
     {
         return Dom.findNext(node.parentNode, criteria, true, maxRoot);
     }
+
     return null;
 };
 
@@ -431,6 +463,7 @@ Dom.findPrevious = function(node, criteria, downOnly, maxRoot)
 
         return Dom.findPrevious(node.parentNode, criteria, true, maxRoot);
     }
+
     return null;
 };
 
@@ -507,6 +540,7 @@ Dom.getLTRBWH = function(elt)
             dims.height = dims.bottom - dims.top;
         }
     }
+
     return dims;
 };
 
@@ -563,12 +597,9 @@ Dom.isScrolledToBottom = function(element)
 {
     var onBottom = (element.scrollTop + element.offsetHeight) == element.scrollHeight;
 
-    if (FBTrace.DBG_CONSOLE)
-    {
-        FBTrace.sysout("Dom.isScrolledToBottom offsetHeight: " + element.offsetHeight +
-            ", scrollTop: " + element.scrollTop + ", scrollHeight: " + element.scrollHeight +
-            ", onBottom: " + onBottom);
-    }
+    Trace.sysout("dom.isScrolledToBottom; offsetHeight: " + element.offsetHeight +
+        ", scrollTop: " + element.scrollTop + ", scrollHeight: " + element.scrollHeight +
+        ", onBottom: " + onBottom);
 
     return onBottom;
 };
@@ -582,14 +613,14 @@ Dom.scrollToBottom = function(element)
 {
     element.scrollTop = element.scrollHeight;
 
-    if (FBTrace.DBG_CONSOLE)
+    if (Trace.active)
     {
-        FBTrace.sysout("scrollToBottom reset scrollTop " + element.scrollTop + " = " +
+        Trace.sysout("dom.scrollToBottom; reset scrollTop " + element.scrollTop + " = " +
             element.scrollHeight);
 
         if (element.scrollHeight == element.offsetHeight)
         {
-            FBTrace.sysout("scrollToBottom attempt to scroll non-scrollable element " +
+            Trace.sysout("dom.scrollToBottom; attempt to scroll non-scrollable element " +
                 element, element);
         }
     }
@@ -654,7 +685,7 @@ Dom.linesIntoCenterView = function(element, scrollBox)  // {before: int, after: 
  * Scrolls an element into view
  * @param {Object} element Element to scroll to
  * @param {Object} scrollBox Scrolled element (Must be an ancestor of "element" or
- *     null for automatically determining the ancestor) 
+ *     null for automatically determining the ancestor)
  * @param {String} alignmentX Horizontal alignment for the element
  *     (valid values: "centerOrLeft", "left", "middle", "right", "none")
  * @param {String} alignmentY Vertical alignment for the element
@@ -745,15 +776,14 @@ Dom.scrollTo = function(element, scrollBox, alignmentX, alignmentY, scrollWhenVi
         }
     }
 
-    if (FBTrace.DBG_PANELS)
-        FBTrace.sysout("dom.scrollTo", element);
+    Trace.sysout("dom.scrollTo;", element);
 };
 
 /**
  * Centers an element inside a scrollable area
  * @param {Object} element Element to scroll to
  * @param {Object} scrollBox Scrolled element (Must be an ancestor of "element" or
- *     null for automatically determining the ancestor) 
+ *     null for automatically determining the ancestor)
  * @param {Boolean} notX Specifies whether the element should be centered horizontally
  * @param {Boolean} notY Specifies whether the element should be centered vertically
  */
@@ -859,7 +889,7 @@ Dom.getDOMMembers = function(object)
 
     if (object instanceof Window)
         { return domMemberCache.Window; }
-    else if (object instanceof Document || object instanceof XMLDocument)
+    else if (object instanceof Document)
         { return domMemberCache.Document; }
     else if (object instanceof Location)
         { return domMemberCache.Location; }
@@ -901,6 +931,8 @@ Dom.getDOMMembers = function(object)
         { return domMemberCache.Node; }
     else if (object instanceof Event || object instanceof Dom.EventCopy)
         { return domMemberCache.Event; }
+    else if (Array.isArray(object))
+        { return domMemberCache.Array; }
 
     return null;
 };
@@ -1697,6 +1729,7 @@ domMemberMap.Window =
 
     "speechSynthesis",
     "requestAnimationFrame",
+    "cancelAnimationFrame",
 ];
 
 domMemberMap.Location =
@@ -2455,6 +2488,11 @@ domMemberMap.Event =
     "stopPropagation"
 ];
 
+domMemberMap.Array = Object.getOwnPropertyNames(Array.prototype).filter(function(name)
+{
+    return name !== "length";
+});
+
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 Dom.domConstantMap =
@@ -2549,6 +2587,8 @@ Dom.domConstantMap =
     "DOM_VK_BACK_SPACE": 1,
     "DOM_VK_CLEAR": 1,
     "DOM_VK_RETURN": 1,
+    // xxxsz: May be removed as soon as Firefox 30 is the minimum supported version
+    // See https://bugzil.la/969247
     "DOM_VK_ENTER": 1,
     "DOM_VK_SHIFT": 1,
     "DOM_VK_CONTROL": 1,
@@ -2753,6 +2793,16 @@ Dom.domInlineEventHandlersMap =
     "onmozpointerlockchange": 1,
     "onmozpointerlockerror": 1,
     "onuserproximity": 1,
+    "ongotpointercapture": 1,
+    "onlostpointercapture": 1,
+    "onpointercancel": 1,
+    "onpointerdown": 1,
+    "onpointerenter": 1,
+    "onpointerleave": 1,
+    "onpointermove": 1,
+    "onpointerout": 1,
+    "onpointerover": 1,
+    "onpointerup": 1,
     "onwheel": 1
 };
 

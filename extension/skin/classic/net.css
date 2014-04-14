@@ -1,9 +1,5 @@
 /* See license.txt for terms of usage */
 
-.panelNode-net {
-    overflow-x: hidden;
-}
-
 .netTable {
     width: 100%;
 }
@@ -21,7 +17,7 @@
 .hideCategory-font .category-font,
 .hideCategory-txt .category-txt,
 .hideCategory-bin .category-bin {
-    display: none!important;
+    display: none !important;
 }
 
 /*************************************************************************************************/
@@ -34,10 +30,15 @@
 .netHeaderCell {
     cursor: pointer;
     -moz-user-select: none;
-    border-bottom: 1px solid #9C9C9C;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.2);
     padding: 0 !important;
     font-weight: bold;
-    background: #C4C4C4 linear-gradient(to bottom, rgba(255, 255, 255, 0.3), rgba(0, 0, 0, 0.2));
+    background: linear-gradient(
+            rgba(255, 255, 255, 0.05),
+            rgba(0, 0, 0, 0.05)),
+        radial-gradient(1px 60% at right,
+            rgba(0, 0, 0, 0.8) 0%,
+            transparent 80%) repeat-x #C8D2DC;
     color: #000000;
     white-space: nowrap;
 }
@@ -48,20 +49,13 @@
 
 .netHeaderCellBox {
     padding: 2px 14px 2px 10px;
-    border-left: 1px solid #D9D9D9;
-    border-right: 1px solid #9C9C9C;
-}
-
-.netHeaderCell:hover:active {
-    background-color: #B4B4B4;
 }
 
 .netHeaderSorted {
-    background-color: #8CA0BE;
+    background-color: #AAC3DC;
 }
 
 .netHeaderSorted > .netHeaderCellBox {
-    border-right-color: #6B7C93;
     background: url(chrome://firebug/skin/arrowDown.svg) no-repeat calc(100% - 4px);
 }
 
@@ -69,8 +63,13 @@
     background-image: url(chrome://firebug/skin/arrowUp.svg);
 }
 
-.netHeaderSorted:hover:active {
-    background-color: #6E87AA;
+.netHeaderCell:hover:active {
+    background-image: linear-gradient(
+            rgba(0, 0, 0, 0.1),
+            transparent),
+        radial-gradient(1px 60% at right,
+            rgba(0, 0, 0, 0.8) 0%,
+            transparent 80%);
 }
 
 /*************************************************************************************************/
@@ -180,7 +179,7 @@
 }
 
 /* Visual separator between phases */
-.netRow[breakLayout="true"] .netCol {
+.netRow[breakLayout="true"]:not(:nth-child(2)) > .netCol {
     border-top: 1px solid rgb(207,207,207);
 }
 
@@ -191,9 +190,12 @@
 .netCol {
     padding: 0;
     vertical-align: top;
-    border-bottom: 1px solid #EFEFEF;
     white-space: nowrap;
     height: 17px;
+}
+
+.netRow:not(:nth-last-child(-n+2)) > .netCol {
+    border-bottom: 1px solid #EFEFEF;
 }
 
 .netLabel {
@@ -241,9 +243,11 @@
     display: none;
     -moz-user-select: none;
     padding-right: 10px;
-    max-width: 100%;
+    padding-bottom: 2px;
+    max-width: calc(100% - 38px);
     background: #FFFFFF;
     z-index: 200;
+    text-overflow: ellipsis;
 }
 
 .netHrefCol:hover > .netFullHrefLabel {
@@ -325,7 +329,7 @@
     left: 0;
     top: 1px;
     bottom: 1px;
-    background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.3), rgba(0, 0, 0, 0.2));
+    background-image: linear-gradient(rgba(255, 255, 255, 0.3), rgba(0, 0, 0, 0.2));
 }
 
 .netBlockingBar {
@@ -411,7 +415,7 @@
  */
 .fromCache .netReceivingBar,
 .fromCache.netReceivingBar {
-    background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.1));
+    background-image: linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.1));
 }
 
 .netSummaryRow .netTimeLabel,
@@ -479,7 +483,7 @@
 }
 
 .netSummaryRow {
-    background: #BBBBBB !important;
+    background: #C8D2DC;
     font-weight: bold;
 }
 
@@ -488,9 +492,8 @@
 }
 
 .netSummaryRow > .netCol {
-    border-top: 1px solid #999999;
-    border-bottom: 2px solid;
-    -moz-border-bottom-colors: #EFEFEF #999999;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .netSummaryRow > .netHrefCol:hover {
@@ -524,36 +527,9 @@
 
 /*************************************************************************************************/
 
-.netLimitRow {
-    background: rgb(255, 255, 225) !important;
-    font-weight:normal;
-    color: black;
-    font-weight:normal;
-}
-
-.netLimitLabel {
-    padding-left: 18px;
-}
-
-.netLimitRow > .netCol {
-    border-bottom: 2px solid;
-    -moz-border-bottom-colors: #EFEFEF #999999;
-    vertical-align: middle !important;
-    padding-top: 2px;
-    padding-bottom: 2px;
-}
-
-.netLimitButton {
-    font-size: 11px;
-    padding-top: 1px;
-    padding-bottom: 1px;
-}
-
-/*************************************************************************************************/
-
 .netInfoCol {
     border-top: 1px solid #EEEEEE;
-    background: #FFFFFF linear-gradient(to bottom, rgba(0, 0, 0, 0.1), transparent 33px) repeat-x;
+    background: #FFFFFF linear-gradient(rgba(0, 0, 0, 0.1), transparent 33px) repeat-x;
 }
 
 .netInfoBody {
@@ -710,27 +686,63 @@ body[resizingHtmlPreview="true"] .netInfoHtmlPreview {
 /* Request & Response Headers */
 
 .netHeadersViewSource {
-    color: #bdbdbd;
     margin-left: 200px;
+}
+
+.netPostParameterSort {
+    margin-left: 30px;
+}
+
+.netHeadersViewSource,
+.netPostParameterSort {
+    color: #bdbdbd;
     font-weight: normal;
 }
 
-.netHeadersViewSource:hover {
+.netHeadersViewSource:hover,
+.netPostParameterSort:hover {
     color: blue;
     cursor: pointer;
 }
 
+.netInfoHeadersTable > .netHeadersGroup > TABLE,
+.netInfoHeadersTable > .netHeadersGroup .netHeadersViewSource {
+    display: none;
+}
+
+.netInfoHeadersTable > .netHeadersGroup.opened > TABLE,
+.netInfoHeadersTable > .netHeadersGroup.opened .netHeadersViewSource {
+    display: inline-block;
+}
+
+.netInfoHeadersTable .netHeader {
+    cursor: pointer;
+    padding-left: 17px;
+    position: static;
+    -moz-user-select: none;
+}
+
+.netInfoHeadersTable .netHeadersViewSource {
+    display: inline-block;
+}
+
 /*************************************************************************************************/
+/* Net Activation Message */
 
 .netActivationRow {
-    background: rgb(229, 229, 229) !important;
+    background: rgb(238, 238, 238) !important;
     font-weight: normal;
     color: black;
 }
 
+.netActivationRow > TD {
+    vertical-align: middle !important;
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+
 .netActivationLabel {
-    background: url(chrome://firebug/skin/info.svg) no-repeat 3px 2px;
-    padding-left: 22px;
+    padding-left: 28px;
 }
 
 /*************************************************************************************************/
@@ -763,13 +775,6 @@ body[resizingHtmlPreview="true"] .netInfoHtmlPreview {
 }
 
 /*************************************************************************************************/
-
-.netActivationRow > .netCol {
-    border-bottom: 2px solid;
-    -moz-border-bottom-colors: #EFEFEF #999999;
-    padding-top: 2px;
-    padding-bottom: 3px;
-}
 
 .useA11y .panelNode-net .a11yFocus:focus,
 .useA11y .panelNode-net .focusRow:focus {

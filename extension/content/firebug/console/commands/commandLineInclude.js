@@ -1,6 +1,8 @@
 /* See license.txt for terms of usage */
 
 define([
+    "firebug/chrome/module",
+    "firebug/chrome/rep",
     "firebug/chrome/reps",
     "firebug/lib/domplate",
     "firebug/lib/locale",
@@ -13,19 +15,25 @@ define([
     "firebug/lib/system",
     "firebug/lib/xpcom",
     "firebug/lib/object",
+    "firebug/chrome/tableRep",
+    "firebug/console/console",
     "firebug/editor/editor",
+    "firebug/editor/inlineEditor",
 ],
-function(FirebugReps, Domplate, Locale, Dom, Win, Css, Str, Options, Menu, System, Xpcom, Obj) {
-with (Domplate) {
+function(Module, Rep, FirebugReps, Domplate, Locale, Dom, Win, Css, Str, Options, Menu, System,
+    Xpcom, Obj, TableRep, Console, Editor, InlineEditor) {
 
 // ********************************************************************************************* //
 // Constants
+
+var {domplate, DomplateTag, SPAN, TR, P, LI, A, BUTTON} = Domplate;
 
 const Ci = Components.interfaces;
 const Cu = Components.utils;
 const removeConfirmation = "commandline.include.removeConfirmation";
 const prompts = Xpcom.CCSV("@mozilla.org/embedcomp/prompt-service;1", "nsIPromptService");
 const storeFilename = "includeAliases.json";
+var Trace = FBTrace.to("DBG_COMMANDLINE");
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -53,13 +61,13 @@ var defaultAliases = {
 // ********************************************************************************************* //
 // Implementation
 
-var CommandLineIncludeRep = domplate(FirebugReps.Table,
+var CommandLineIncludeRep = domplate(TableRep,
 {
     tableClassName: "tableCommandLineInclude dataTable",
 
     tag:
-        FirebugReps.OBJECTBOX({_repObject: "$object"},
-            FirebugReps.Table.tag
+        Rep.tags.OBJECTBOX({_repObject: "$object"},
+            TableRep.tag
         ),
 
     inspectable: false,
@@ -72,25 +80,25 @@ var CommandLineIncludeRep = domplate(FirebugReps.Table,
         if (object.cons === DomplateTag)
             return object;
         else
-            return FirebugReps.Table.getValueTag(object);
+            return TableRep.getValueTag(object);
     },
 
     getUrlTag: function(href, aliasName)
     {
         var urlTag =
-            SPAN({style:"height:100%"},
+            SPAN({style: "height: 100%"},
                 A({"href": href, "target": "_blank", "class": "url"},
                     Str.cropString(href, 100)
-                ),
-                SPAN({"class": "commands"}
-                // xxxFlorent: temporarily disabled, see: 
-                //    http://code.google.com/p/fbug/issues/detail?id=5878#c27
+                )
                 /*,
+                // xxxFlorent: temporarily disabled, see:
+                //    http://code.google.com/p/fbug/issues/detail?id=5878#c27
+                SPAN({"class": "commands"},
                 SPAN({
                     "class":"closeButton",
                     onclick: this.deleteAlias.bind(this, aliasName),
-                })*/
-                )
+                })
+                )*/
             );
 
         return urlTag;
@@ -101,12 +109,12 @@ var CommandLineIncludeRep = domplate(FirebugReps.Table,
         var store = CommandLineInclude.getStore();
         var keys = store.getKeys();
         var arrayToDisplay = [];
-        var returnValue = Firebug.Console.getDefaultReturnValue();
+        var returnValue = Console.getDefaultReturnValue();
 
         if (keys.length === 0)
         {
             var msg = Locale.$STR("commandline.include.noDefinedAlias");
-            Firebug.Console.log(msg, context, null, FirebugReps.Hint);
+            Console.log(msg, context, null, FirebugReps.Hint);
             return returnValue;
         }
 
@@ -114,19 +122,34 @@ var CommandLineIncludeRep = domplate(FirebugReps.Table,
         {
             var aliasName = keys[i];
             arrayToDisplay.push({
-                "alias": SPAN({"class":"aliasName", "data-aliasname": aliasName}, aliasName),
-                "URL": this.getUrlTag(store.getItem(aliasName), aliasName, context)
+                alias: SPAN({"class": "aliasName", "data-aliasname": aliasName}, aliasName),
+                URL: this.getUrlTag(store.getItem(aliasName), aliasName, context)
             });
         }
 
+        var columns = [
+            {
+                property: "alias",
+                label: Locale.$STR("commandline.include.Alias")
+            },
+            {
+                property: "URL",
+                label: Locale.$STR("commandline.include.URL")
+            }
+        ];
+
         var input = new CommandLineIncludeObject();
-        this.log(arrayToDisplay, ["alias", "URL"], context, input);
+        var row = this.log(arrayToDisplay, columns, context, input);
+
+        // Add rep object for the context menu options
+        row.repObject = input;
+
         return returnValue;
     },
 
     deleteAlias: function(aliasName, ev)
     {
-        // NOTE: that piece of code has not been tested since deleting aliases through the table 
+        // NOTE: that piece of code has not been tested since deleting aliases through the table
         // has been disabled.
         // Once it is enabled again, make sure FBTests is available for this feature
         var store = CommandLineInclude.getStore();
@@ -153,7 +176,7 @@ var CommandLineIncludeRep = domplate(FirebugReps.Table,
     startEditing: function(target)
     {
         var editor = this.getEditor(target.ownerDocument);
-        Firebug.Editor.startEditing(target, target.dataset.aliasname, editor);
+        Editor.startEditing(target, target.dataset.aliasname, editor);
     },
 
     editAliasName: function(tr)
@@ -229,10 +252,11 @@ var CommandLineIncludeRep = domplate(FirebugReps.Table,
     getContextMenuItems: function(object, target, context)
     {
         var tr = Dom.getAncestorByTagName(target, "tr");
-        if (!tr)
+        var link = tr && tr.querySelector("a.url");
+        if (!link)
             return [];
 
-        var url = tr.querySelector("a.url").href;
+        var url = link.href;
         var aliasName = tr.querySelector(".aliasName").dataset.aliasname;
         var context = Firebug.currentContext;
         var items = [
@@ -242,7 +266,7 @@ var CommandLineIncludeRep = domplate(FirebugReps.Table,
                 tooltiptext: "clipboard.tip.Copy_Location",
                 command: Obj.bindFixed(System.copyToClipboard, System, url)
             },
-            // xxxFlorent: temporarily disabled, see: 
+            // xxxFlorent: temporarily disabled, see:
             //    http://code.google.com/p/fbug/issues/detail?id=5878#c27
             /*"-",
             {
@@ -309,7 +333,7 @@ function CommandLineIncludeObject()
 
 // ********************************************************************************************* //
 
-var CommandLineInclude = Obj.extend(Firebug.Module,
+var CommandLineInclude = Obj.extend(Module,
 {
     onSuccess: function(newAlias, context, loadingMsgRow, xhr, hasWarnings)
     {
@@ -322,17 +346,17 @@ var CommandLineInclude = Obj.extend(Firebug.Module,
         {
             var store = this.getStore();
             store.setItem(newAlias, url);
-            this.log("aliasCreated", [newAlias], [context, "info"]);
+            this._log("aliasCreated", [newAlias], [context, "info"]);
         }
 
         if (!hasWarnings)
-            this.log("includeSuccess", [filename], [context, "info", true]);
+            this._log("includeSuccess", [filename], [context, "info", true]);
     },
 
     onError: function(context, url, loadingMsgRow)
     {
         this.clearLoadingMessage(loadingMsgRow);
-        this.log("loadFail", [url], [context, "error"]);
+        this._log("loadFail", [url], [context, "error"]);
     },
 
     clearLoadingMessage: function(loadingMsgRow)
@@ -363,40 +387,46 @@ var CommandLineInclude = Obj.extend(Firebug.Module,
         // Let's log when the store could not be opened.
         if (!this.store)
         {
-            if (FBTrace.DBG_COMMANDLINE)
-                FBTrace.sysout("CommandLineInclude.getStore; can't open or create the store");
+            Trace.sysout("CommandLineInclude.getStore; can't open or create the store");
         }
 
         return this.store;
     },
 
-    log: function(localeStr, localeArgs, logArgs, noAutoPrefix)
+    // xxxFlorent: Prefix with underscore until we fix Issue 6806
+    // since we're listening to Firebug.Console events.
+    _log: function(localeStr, localeArgs, logArgs, noAutoPrefix)
     {
-        var prefixedLocaleStr = (noAutoPrefix ? localeStr : "commandline.include."+localeStr);
-
+        var prefixedLocaleStr = (noAutoPrefix ? localeStr : "commandline.include." + localeStr);
         var msg = Locale.$STRF(prefixedLocaleStr, localeArgs);
         logArgs.unshift([msg]);
-        return Firebug.Console.logFormatted.apply(Firebug.Console, logArgs);
+        return Console.logFormatted.apply(Console, logArgs);
     },
 
-    // include(context, url[, newAlias])
-    // includes a remote script
+    /**
+     * Includes a remote script.
+     * Executed by the include() command.
+     *
+     * @param {Context} context The Firebug context.
+     * @param {string} url The location of the script.
+     * @param {string} [newAlias] The alias to define for the script.
+     */
     include: function(context, url, newAlias)
     {
         var reNotAlias = /[\.\/]/;
         var urlIsAlias = url !== null && !reNotAlias.test(url);
-        var returnValue = Firebug.Console.getDefaultReturnValue();
+        var returnValue = Console.getDefaultReturnValue();
 
         // checking arguments:
         if ((newAlias !== undefined && typeof newAlias !== "string") || newAlias === "")
         {
-            this.log("invalidAliasArgumentType", [], [context, "error"]);
+            this._log("invalidAliasArgumentType", [], [context, "error"]);
             return returnValue;
         }
 
         if (url !== null && typeof url !== "string" || !url && !newAlias)
         {
-            this.log("invalidUrlArgumentType", [], [context, "error"]);
+            this._log("invalidUrlArgumentType", [], [context, "error"]);
             return returnValue;
         }
 
@@ -405,13 +435,13 @@ var CommandLineInclude = Obj.extend(Firebug.Module,
 
         if ((urlIsAlias && url.length > 30) || (newAlias && newAlias.length > 30))
         {
-            this.log("tooLongAliasName", [newAlias || url], [context, "error"]);
+            this._log("tooLongAliasName", [newAlias || url], [context, "error"]);
             return returnValue;
         }
 
         if (newAlias !== undefined && reNotAlias.test(newAlias))
         {
-            this.log("invalidAliasName", [newAlias], [context, "error"]);
+            this._log("invalidAliasName", [newAlias], [context, "error"]);
             return returnValue;
         }
 
@@ -422,7 +452,7 @@ var CommandLineInclude = Obj.extend(Firebug.Module,
             url = store.getItem(aliasName);
             if (url === undefined)
             {
-                this.log("aliasNotFound", [aliasName], [context, "error"]);
+                this._log("aliasNotFound", [aliasName], [context, "error"]);
                 return returnValue;
             }
         }
@@ -433,15 +463,15 @@ var CommandLineInclude = Obj.extend(Firebug.Module,
             var store = this.getStore();
             if (store.getItem(newAlias) === undefined)
             {
-                this.log("aliasNotFound", [newAlias], [context, "error"]);
+                this._log("aliasNotFound", [newAlias], [context, "error"]);
                 return returnValue;
             }
 
             store.removeItem(newAlias);
-            this.log("aliasRemoved", [newAlias], [context, "info"]);
+            this._log("aliasRemoved", [newAlias], [context, "info"]);
             return returnValue;
         }
-        var loadingMsgRow = this.log("Loading", [], [context, "loading", true], true);
+        var loadingMsgRow = this._log("Loading", [], [context, "loading", true], true);
         var onSuccess = this.onSuccess.bind(this, newAlias, context, loadingMsgRow);
         var onError = Obj.bindFixed(this.onError, this, context, url, loadingMsgRow);
         this.evaluateRemoteScript(url, context, onSuccess, onError, loadingMsgRow);
@@ -449,11 +479,23 @@ var CommandLineInclude = Obj.extend(Firebug.Module,
         return returnValue;
     },
 
+    /**
+     * Evaluates a remote script. Prints a warning message in the console in case of syntax error.
+     *
+     * @param {string} url The URL.
+     * @param {Context} context The Firebug context.
+     * @param {function} [successFunction] The callback if the script has been successfully run.
+     * @param {function} [errorFunction] The callback if the expression has been run with errors.
+     * @param {*} [loadingMsgRow] The row in the console printed while the script is loading and
+     *      that has to be cleared.
+     */
     evaluateRemoteScript: function(url, context, successFunction, errorFunction, loadingMsgRow)
     {
         var xhr = new XMLHttpRequest({ mozAnon: true, timeout:30});
         var acceptedSchemes = ["http", "https"];
         var absoluteURL = context.browser.currentURI.resolve(url);
+
+        Trace.sysout("CommandLineInclude.evaluateRemoteScript; absoluteURL = " + absoluteURL);
 
         xhr.onload = function()
         {
@@ -465,12 +507,31 @@ var CommandLineInclude = Obj.extend(Firebug.Module,
             // test if the content is an HTML file, which is the most current after a mistake
             if (!isValidJS(codeToEval))
             {
-                CommandLineInclude.log("invalidSyntax", [], [context, "warn"]);
+                CommandLineInclude._log("invalidSyntax", [], [context, "warn"]);
                 CommandLineInclude.clearLoadingMessage(loadingMsgRow);
                 hasWarnings = true;
             }
 
-            Firebug.CommandLine.evaluateInWebPage(codeToEval, context);
+            // Do not print anything if the inclusion succeeds.
+            var successFunctionEval = function() { };
+            // Let's use the default function to handle errors.
+            var errorFunctionEval = null;
+
+            // xxxFlorent: Using evaluateInGlobal doesn't allow to stop execution in the script
+            //             panel. Just use it when having CSP until we migrate to JSD2.
+            //             (see Issue 6551)
+            if (CommandLineInclude.isCSPDoc(context))
+            {
+                Trace.sysout("CommandLineInclude.evaluateRemoteScript; "+
+                    "document is using CSP. use evaluateInGlobal");
+                Firebug.CommandLine.evaluateInGlobal(codeToEval, context, undefined, undefined,
+                    successFunctionEval, errorFunctionEval, undefined, {noCmdLineAPI: true});
+            }
+            else
+            {
+                Firebug.CommandLine.evaluateInWebPage(codeToEval, context);
+            }
+
             if (successFunction)
                 successFunction(xhr, hasWarnings);
         };
@@ -489,22 +550,46 @@ var CommandLineInclude = Obj.extend(Firebug.Module,
             this.clearLoadingMessage(loadingMsgRow);
             if (ex.name === "NS_ERROR_UNKNOWN_PROTOCOL")
             {
-                this.log("invalidRequestProtocol", [], [context, "error"]);
+                this._log("invalidRequestProtocol", [], [context, "error"]);
                 return;
             }
             throw ex;
         }
 
-        if (!~acceptedSchemes.indexOf(xhr.channel.URI.scheme))
+        if (acceptedSchemes.indexOf(xhr.channel.URI.scheme) === -1)
         {
-            this.log("invalidRequestProtocol", [], [context, "error"]);
+            this._log("invalidRequestProtocol", [], [context, "error"]);
             this.clearLoadingMessage(loadingMsgRow);
             return;
         }
 
         xhr.send(null);
+    },
 
-        // xxxFlorent: TODO show XHR progress
+    /**
+     * Hack; Should only be used inside CommandLineInclude.
+     * Test whether the current global is under CSP.
+     *
+     * @param {Context} context
+     *
+     * @return boolean
+     */
+    isCSPDoc: function(context)
+    {
+        // Create a random variable name:
+        var varName = "_" + Math.ceil(Math.random() * 1000000);
+        var codeToEval = "window['" + varName + "']" + " = true;";
+
+        var global = context.getCurrentGlobal();
+
+        context.includePatternToBlock = codeToEval;
+        Firebug.CommandLine.evaluateInWebPage(codeToEval, context);
+        var ret = global.wrappedJSObject[varName] !== true;
+
+        if (ret)
+            delete global.wrappedJSObject[varName];
+
+        return ret;
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *  //
@@ -516,6 +601,23 @@ var CommandLineInclude = Obj.extend(Firebug.Module,
         {
             StorageService.removeStorage(storeFilename);
             this.store = null;
+        }
+    },
+
+    /**
+     * Hack; Should only be used inside CommandLineInclude.
+     * Intercept the display of a warning if related to the use of isCSPDoc().
+     *
+     * Event triggered by Console.logRow().
+     */
+    onLogRowCreated: function(panel, row, context)
+    {
+        if (row && row.className.indexOf("warningMessage") !== -1 &&
+            context.includePatternToBlock &&
+            row.textContent.indexOf(context.includePatternToBlock) !== -1)
+        {
+            row.parentNode.removeChild(row);
+            context.includePatternToBlock = "";
         }
     }
 });
@@ -538,10 +640,10 @@ function onCommand(context, args)
 
 function IncludeEditor(doc)
 {
-    Firebug.InlineEditor.call(this, doc);
+    InlineEditor.call(this, doc);
 }
 
-IncludeEditor.prototype = domplate(Firebug.InlineEditor.prototype,
+IncludeEditor.prototype = domplate(InlineEditor.prototype,
 {
     endEditing: function(target, value, cancel)
     {
@@ -603,8 +705,9 @@ Firebug.registerCommand("include", {
 Firebug.registerRep(CommandLineIncludeRep);
 
 Firebug.registerModule(CommandLineInclude);
+Console.addListener(CommandLineInclude);
 
 return CommandLineInclude;
 
 // ********************************************************************************************* //
-}});
+});

@@ -31,7 +31,7 @@ Cu["import"]("resource://fbtest/FBTestIntegrate.js");
  * This template represents a "test-result" that is beening displayed within
  * Trace Console window. Expandable and collapsible logic associated with each
  * result is also implemented by this object.
- * 
+ *
  * @domplate
  */
 var TestResultRep = domplate(
@@ -67,24 +67,6 @@ var TestResultRep = domplate(
         TR({"class": "testResultInfoRow", _repObject: "$result",
             $testError: "$result|isError"},
             TD({"class": "testResultInfoCol", colspan: 2})
-        ),
-
-    manualVerifyTag:
-        TR({"class": "testResultRow testManualVerify", _repObject: "$test",
-            onclick: "$onClickManualVerify"},
-            TD({"class": "testResultCol", width: "100%"},
-                DIV({"class": "testResultLabel"}, "$verifyMsg"),
-                PRE({"class": "testResultLabel"}, "$instructions")
-            ),
-            TD({"class": "testResultCol"},
-                SPAN({"class": "testLink", onclick: "$onManualPasses"},
-                    "Pass"
-                ),
-                "&nbsp;",
-                SPAN({"class": "testLink", onclick: "$onManualFails" },
-                    "Fail"
-                )
-            )
         ),
 
     getMessage: function(result)
@@ -123,41 +105,6 @@ var TestResultRep = domplate(
                 this.toggleResultRow(row);
                 Events.cancelEvent(event);
             }
-        }
-    },
-
-    onClickManualVerify: function(event)
-    {
-        Events.cancelEvent(event);
-    },
-
-    onManualPasses: function(event)
-    {
-        this.handleManualVerify(event, true, "Manual verification passed");
-    },
-
-    onManualFails: function(event)
-    {
-        this.handleManualVerify(event, false, "Manual verification failed");
-    },
-
-    handleManualVerify: function(event, passes, msg)
-    {
-        Events.cancelEvent(event);
-
-        var row = Dom.getAncestorByClass(event.target, "testManualVerify");
-        var test = Firebug.getRepObject(row);
-
-        row.parentNode.removeChild(row);
-
-        if (!test || !test.cleanupHandler)
-        {
-            FBTestApp.FBTest.ok(passes, msg);
-            FBTestApp.FBTest.testDone();
-        }
-        else
-        {
-            test.cleanupHandler.call({}, passes);
         }
     },
 

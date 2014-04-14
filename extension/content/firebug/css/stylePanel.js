@@ -1,36 +1,37 @@
 /* See license.txt for terms of usage */
 
 define([
-    "firebug/lib/object",
     "firebug/firebug",
-    "firebug/chrome/firefox",
-    "firebug/lib/domplate",
-    "firebug/chrome/reps",
-    "firebug/lib/xpcom",
-    "firebug/lib/locale",
-    "firebug/lib/events",
-    "firebug/lib/url",
     "firebug/lib/array",
-    "firebug/js/sourceLink",
-    "firebug/lib/dom",
     "firebug/lib/css",
-    "firebug/lib/xpath",
-    "firebug/lib/string",
+    "firebug/lib/dom",
+    "firebug/lib/domplate",
+    "firebug/lib/events",
     "firebug/lib/fonts",
+    "firebug/lib/locale",
+    "firebug/lib/object",
     "firebug/lib/options",
+    "firebug/lib/string",
+    "firebug/lib/url",
+    "firebug/lib/xpath",
+    "firebug/lib/xpcom",
+    "firebug/chrome/firefox",
+    "firebug/chrome/menu",
+    "firebug/chrome/reps",
     "firebug/css/cssModule",
     "firebug/css/cssPanel",
-    "firebug/chrome/menu",
+    "firebug/css/cssReps",
     "firebug/css/loadHandler",
+    "firebug/debugger/script/sourceLink",
 ],
-function(Obj, Firebug, Firefox, Domplate, FirebugReps, Xpcom, Locale, Events, Url, Arr,
-    SourceLink, Dom, Css, Xpath, Str, Fonts, Options, CSSModule, CSSStyleSheetPanel, Menu,
-    LoadHandler) {
-
-with (Domplate) {
+function(Firebug, Arr, Css, Dom, Domplate, Events, Fonts, Locale, Obj, Options, Str, Url, Xpath,
+    Xpcom, Firefox, Menu, FirebugReps, CSSModule, CSSStyleSheetPanel, CSSReps, LoadHandler,
+    SourceLink) {
 
 // ********************************************************************************************* //
 // Constants
+
+var {domplate, FOR, TAG, DIV, SPAN, TR, H1, P, UL, A} = Domplate;
 
 const Cc = Components.classes;
 const Ci = Components.interfaces;
@@ -104,7 +105,7 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
 
         ruleTag:
             DIV({"class": "cssElementRuleContainer"},
-                TAG(Firebug.CSSStyleRuleTag.tag, {rule: "$rule"}),
+                TAG(CSSReps.CSSStyleRuleTag.tag, {rule: "$rule"}),
                 TAG(FirebugReps.SourceLink.tag, {object: "$rule.sourceLink"})
             ),
 
@@ -350,7 +351,7 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
             // Helper array for all shorthand properties for the current property.
             prop.computed = {};
 
-            // Get all shorthand propertis.
+            // Get all shorthand properties.
             var dummyStyle = dummyElement.style;
 
             // xxxHonza: Not sure why this happens.
@@ -634,32 +635,27 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
                     {
                         self.togglePseudoClassLock(":active");
                     }
+                },
+                {
+                    label: "style.option.label.focus",
+                    type: "checkbox",
+                    checked: self.hasPseudoClassLock(":focus"),
+                    tooltiptext: "style.option.tip.focus",
+                    command: function()
+                    {
+                        self.togglePseudoClassLock(":focus");
+                    }
                 }
             );
-
-            if (Dom.domUtils.hasPseudoClassLock)
-            {
-                items.push(
-                    {
-                        label: "style.option.label.focus",
-                        type: "checkbox",
-                        checked: self.hasPseudoClassLock(":focus"),
-                        tooltiptext: "style.option.tip.focus",
-                        command: function()
-                        {
-                            self.togglePseudoClassLock(":focus");
-                        }
-                    }
-                );
-            }
         }
 
         return items;
     },
 
-    getContextMenuItems: function(style, target)
+    getContextMenuItems: function(style, target, context, x, y)
     {
-        var items = CSSStyleSheetPanel.prototype.getContextMenuItems.apply(this, [style, target]);
+        var items = CSSStyleSheetPanel.prototype.getContextMenuItems.apply(this,
+            [style, target, context, x, y]);
         var insertIndex = 0;
 
         for (var i = 0; i < items.length; ++i)
@@ -720,6 +716,12 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
             this, infoTip, target, x, y, rangeParent, rangeOffset);
     },
 
+    getCurrentColor: function()
+    {
+        var cs = this.selection.ownerDocument.defaultView.getComputedStyle(this.selection);
+        return cs.getPropertyValue("color");
+    },
+
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
     // Extends stylesheet (CSS Panel)
 
@@ -739,22 +741,15 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
 
     hasPseudoClassLock: function(pseudoClass)
     {
-        if (Dom.domUtils.hasPseudoClassLock)
+        try
         {
             return Dom.domUtils.hasPseudoClassLock(this.selection, pseudoClass);
         }
-        else
+        catch (exc)
         {
-            // Fallback in case the new pseudo-class lock API isn't available
-            var state = safeGetContentState(this.selection);
-            switch(pseudoClass)
-            {
-                case ":active":
-                    return state & STATE_ACTIVE;
-
-                case ":hover":
-                    return state & STATE_HOVER;
-            }
+            if (FBTrace.DBG_ERRORS)
+                FBTrace.sysout("css.hasPseudoClassLock FAILS " + exc, exc);
+            return false;
         }
     },
 
@@ -763,41 +758,17 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
         if (FBTrace.DBG_CSS)
             FBTrace.sysout("css.togglePseudoClassLock; pseudo-class: " + pseudoClass);
 
-        if (Dom.domUtils.hasPseudoClassLock)
-        {
-            if (Dom.domUtils.hasPseudoClassLock(this.selection, pseudoClass))
-                Dom.domUtils.removePseudoClassLock(this.selection, pseudoClass);
-            else
-                Dom.domUtils.addPseudoClassLock(this.selection, pseudoClass);
-        }
+        if (Dom.domUtils.hasPseudoClassLock(this.selection, pseudoClass))
+            Dom.domUtils.removePseudoClassLock(this.selection, pseudoClass);
         else
-        {
-            // Fallback in case the new pseudo-class lock API isn't available
-            var currentState = safeGetContentState(this.selection);
-            var remove = false;
-            switch(pseudoClass)
-            {
-                case ":active":
-                    state = STATE_ACTIVE;
-                    break;
-
-                case ":hover":
-                    state = STATE_HOVER;
-                    break;
-            }
-            remove = currentState & state;
-
-            Dom.domUtils.setContentState(remove ? this.selection.ownerDocument.documentElement :
-                this.selection, state);
-        }
+            Dom.domUtils.addPseudoClassLock(this.selection, pseudoClass);
 
         this.refresh();
     },
 
     clearPseudoClassLocks: function()
     {
-        if (Dom.domUtils.clearPseudoClassLocks)
-            Dom.domUtils.clearPseudoClassLocks(this.selection);
+        Dom.domUtils.clearPseudoClassLocks(this.selection);
     },
 
     addStateChangeHandlers: function(el)
@@ -966,4 +937,4 @@ Firebug.registerPanel(CSSStylePanel);
 return CSSStylePanel;
 
 // ********************************************************************************************* //
-}});
+});

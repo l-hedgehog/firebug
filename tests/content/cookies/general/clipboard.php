@@ -1,5 +1,5 @@
 <?php
-    setcookie('CopyPasteCookie', 'Test Cookie Value', 1565778363, '/dir', '', false);
+    setcookie('CopyPasteCookie', 'Test Cookie Value', 2000000000, '/dir', '', false);
 ?>
 
 <!DOCTYPE html>
@@ -24,7 +24,7 @@
                         <span class="ok">&rArr; The <em>Cookies</em> panel should list a cookie with the name <code>CopyPasteCookies</code></span>
                     </li>
                     <li>Right-click the <code>CopyPasteCookies</code> cookie and choose <em>Copy</em> from the context menu</li>
-                    <li>Right-click into the panel and choose <em>Pase</em> from the context menu</li>
+                    <li>Right-click into the panel and choose <em>Paste</em> from the context menu</li>
                 </ol>
                 <h3>Expected result</h3>
                 <ul>

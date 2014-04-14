@@ -1,51 +1,32 @@
 function runTest()
 {
-    FBTest.sysout("issue6454.START");
-
     FBTest.openNewTab(basePath + "search/6454/issue6454.html", function()
     {
-        FBTest.openFirebug();
-        FBTest.selectPanel("html");
-
-        var testSuite = [];
-
-        // Test 1: 'testing', forward, case insensitive
-        testSuite.push(function(callback)
+        FBTest.openFirebug(function()
         {
-            executeSearchTest("testing", false, false, function(counter)
+            FBTest.selectPanel("html");
+
+            var tasks = new FBTest.TaskList();
+            tasks.push(searchTest, "testing", false, 14);
+            tasks.push(searchTest, "testing", true, 7);
+            tasks.push(searchTest, "Testing", false, 8);
+            tasks.push(searchTest, "#test div", false, 5);
+            tasks.push(searchTest, "/html/body", true, 4);
+            tasks.run(function()
             {
-                FBTest.compare(10, counter, "There must be precise number " +
-                     "of occurences (10) actual: " + counter);
-                callback();
+                FBTest.testDone();
             });
         });
+    });
+}
 
-        // Test 2: 'testing', forward, case sensitive
-        testSuite.push(function(callback)
-        {
-            executeSearchTest("testing", false, true, function(counter)
-            {
-                FBTest.compare(4, counter, "There must be precise number " +
-                    "of occurences (4) actual: " + counter);
-                callback();
-            });
-        });
-
-        // Test 3: 'Testing', forward, case insensitive.
-        testSuite.push(function(callback)
-        {
-            executeSearchTest("Testing", false, false, function(counter)
-            {
-                FBTest.compare(5, counter, "There must be precise number " +
-                    "of occurences (5) actual: " + counter);
-                callback();
-            });
-        });
-
-        FBTest.runTestSuite(testSuite, function()
-        {
-            FBTest.testDone("issue6454.DONE");
-        });
+function searchTest(callback, text, caseSensitive, expectedMatches)
+{
+    executeSearchTest(text, false, caseSensitive, function(counter)
+    {
+        FBTest.compare(expectedMatches, counter, "There must be " + expectedMatches +
+            " matches when searching for \"" + text + "\"");
+        callback();
     });
 }
 

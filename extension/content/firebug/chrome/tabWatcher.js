@@ -1,6 +1,7 @@
 /* See license.txt for terms of usage */
 
 define([
+    "firebug/chrome/eventSource",
     "firebug/lib/object",
     "firebug/firebug",
     "firebug/chrome/firefox",
@@ -17,7 +18,7 @@ define([
     "firebug/trace/traceModule",
     "firebug/chrome/tabContext",
 ],
-function(Obj, Firebug, Firefox, Xpcom, HttpRequestObserver, Events, Url, Http, Win,
+function(EventSource, Obj, Firebug, Firefox, Xpcom, HttpRequestObserver, Events, Url, Http, Win,
     Str, Arr, Debug, TraceListener, TraceModule) {
 
 // ********************************************************************************************* //
@@ -62,7 +63,7 @@ var showContextTimeout = 200;
  * responsible for creation of a context object that contains meta-data about currently
  * debugged page.
  */
-Firebug.TabWatcher = Obj.extend(new Firebug.Listener(),
+Firebug.TabWatcher = Obj.extend(new EventSource(),
 /** @lends Firebug.TabWatcher */
 {
     // Store contexts where they can be accessed externally
@@ -181,7 +182,7 @@ Firebug.TabWatcher = Obj.extend(new Firebug.Listener(),
             // HTML panel's edit mode can cause onStateChange changes and context
             // recreation.
             if (context.loaded && context == Firebug.currentContext &&
-                context.getName() == "about:blank")
+                context.getName() == aboutBlank)
             {
                 FBTrace.sysout("tabWatcher.watchTopWindow; page already watched");
                 return;
@@ -388,7 +389,7 @@ Firebug.TabWatcher = Obj.extend(new Firebug.Listener(),
         // The proper instance of Firebug.chrome object (different for detached Firebug and
         // accessible as Firebug.chrome property) must be used for the context object.
         // (the global context object Firebug.currentContext is also different for
-        // detached firebug).
+        // detached Firebug).
         var context = new contextType(win, browser, Firebug.chrome, persistedState);
         contexts.push(context);
 
@@ -516,6 +517,11 @@ Firebug.TabWatcher = Obj.extend(new Firebug.Listener(),
      */
     unwatchTopWindow: function(win)
     {
+        // Ignore about:blank pages
+        // xxxHonza: we can't ignore about blank pages, the context is created for them too.
+        //if (win.location == aboutBlank)
+        //    return;
+
         var context = this.getContextByWindow(win);
         if (FBTrace.DBG_WINDOWS)
         {
@@ -741,6 +747,19 @@ Firebug.TabWatcher = Obj.extend(new Firebug.Listener(),
         return this.getContextByWindow(global) || this.getContextBySandbox(global);
     },
 
+    getContextByTabActor: function(tabActor)
+    {
+        if (!tabActor)
+            return;
+
+        for (var i=0; i<contexts.length; i++)
+        {
+            var context = contexts[i];
+            if (context.tabClient && context.tabClient._actor == tabActor)
+                return context;
+        }
+    },
+
     // deprecated, use Win.getBrowserByWindow
     getBrowserByWindow: function(win)
     {
@@ -765,9 +784,17 @@ Firebug.TabWatcher = Obj.extend(new Firebug.Listener(),
     {
         for (var i = 0; i < contexts.length; ++i)
         {
-            var rc = fn(contexts[i]);
-            if (rc)
-                return rc;
+            try
+            {
+                var rc = fn(contexts[i]);
+                if (rc)
+                    return rc;
+            }
+            catch (err)
+            {
+                if (FBTrace.DBG_ERRORS)
+                    FBTrace.sysout("-> tabWatcher.iterateContexts; EXCEPTION " + err, err);
+            }
         }
     },
 
@@ -793,7 +820,7 @@ var TabWatcherUnloader =
     registerWindow: function(win)
     {
         var root = (win.parent == win);
-        var eventName = (root && (win.location.href !== "about:blank")) ? "pagehide" : "unload";
+        var eventName = (root && (win.location.href !== aboutBlank)) ? "pagehide" : "unload";
         var listener = Obj.bind(root ? this.onPageHide : this.onUnload, this);
         Events.addEventListener(win, eventName, listener, false);
 
@@ -870,9 +897,39 @@ Firebug.TabWatcherUnloader = TabWatcherUnloader;
 
 // ********************************************************************************************* //
 
+// xxxHonza: I don't know why, but CSSStyleSheetPanel.destroy invokes
+// FrameProgressListener.onStateChange again. Switch between two tabs
+// with Firebug UI opened (the same domain) to see the scenario.
+// Caused by accessing |this.panelNode.scrollTop|
+// So, do not reexecute locationChange if it's in progress.
+var stateInProgress = false;
+
 var TabProgressListener = Obj.extend(Http.BaseProgressListener,
 {
     onLocationChange: function(progress, request, uri)
+    {
+        if (stateInProgress)
+        {
+            FBTrace.sysout("tabWatcher.onLocationChange; already IN-PROGRESS")
+            return;
+        }
+
+        stateInProgress = true;
+
+        try
+        {
+            this.doLocationChange(progress, request, uri);
+        }
+        catch (e)
+        {
+        }
+        finally
+        {
+            stateInProgress = false;
+        }
+    },
+
+    doLocationChange: function(progress, request, uri)
     {
         // Only watch windows that are their own parent - e.g. not frames
         if (progress.DOMWindow.parent == progress.DOMWindow)
@@ -889,6 +946,7 @@ var TabProgressListener = Obj.extend(Http.BaseProgressListener,
                     (requestFromFirebuggedWindow?" from firebugged window":" no firebug"));
             }
 
+            // See issue 4040 xxxHonza: different patch must be used.
             // 1) We don't want to skip about:blank since Firebug UI is not update when
             // switching to about:blank tab, see issue 4040
             //
@@ -898,6 +956,8 @@ var TabProgressListener = Obj.extend(Http.BaseProgressListener,
             // There is a workaround for this case in {@TabWatchListener.showContext]
             //
             // the onStateChange will deal with this troublesome case
+            // This must stay disabled otherwise firebug/4040 test fails
+            // See also a comment in {@link NetMonitor.onModifyRequest}
             //if (uri && uri.spec === "about:blank")
             //    return;
 
@@ -932,6 +992,29 @@ var FrameProgressListener = Obj.extend(Http.BaseProgressListener,
 {
     onStateChange: function(progress, request, flag, status)
     {
+        if (stateInProgress)
+        {
+            FBTrace.sysout("tabWatcher.onLocationChange; already IN-PROGRESS")
+            return;
+        }
+
+        stateInProgress = true;
+
+        try
+        {
+            this.doStateChange(progress, request, flag, status)
+        }
+        catch (e)
+        {
+        }
+        finally
+        {
+            stateInProgress = false;
+        }
+    },
+
+    doStateChange: function(progress, request, flag, status)
+    {
         if (FBTrace.DBG_WINDOWS)
         {
             var win = progress.DOMWindow;
@@ -951,11 +1034,14 @@ var FrameProgressListener = Obj.extend(Http.BaseProgressListener,
             if (safeName && ((safeName == dummyURI) || safeName == "about:document-onload-blocker"))
             {
                 var win = progress.DOMWindow;
+
                 // Another weird edge case here - when opening a new tab with about:blank,
                 // "unload" is dispatched to the document, but onLocationChange is not called
                 // again, so we have to call watchTopWindow here
 
-                if (win.parent == win && (win.location.href == "about:blank"))
+                // xxxHonza: we need to use (win.location.href == "about:blank")
+                // Otherwise the DOM panel is updated too soon (when doc.readyState == "loading")
+                if (win.parent == win && (win.location.href == aboutBlank))
                 {
                     Firebug.TabWatcher.watchTopWindow(win, win.location.href);
                     return;
@@ -1088,7 +1174,7 @@ var TabWatcherHttpObserver = Obj.extend(Object,
                 delete browser.FirebugLink;
 
                 // then this page is opened in new tab or window
-                if (Win.safeGetWindowLocation(win).toString() == "about:blank")
+                if (Win.safeGetWindowLocation(win).toString() == aboutBlank)
                 {
                     var referer = getRefererHeader(request);
                     if (referer)

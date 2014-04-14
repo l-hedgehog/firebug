@@ -1,6 +1,7 @@
 /* See license.txt for terms of usage */
 
 define([
+    "firebug/chrome/module",
     "firebug/lib/object",
     "firebug/firebug",
     "firebug/lib/locale",
@@ -9,7 +10,9 @@ define([
     "firebug/chrome/annotations",
     "firebug/chrome/firefox",
 ],
-function(Obj, Firebug, Locale, Url, TabWatcher, Annotations, Firefox) {
+function(Module, Obj, Firebug, Locale, Url, TabWatcher, Annotations, Firefox) {
+
+"use strict";
 
 // ********************************************************************************************* //
 // Constants
@@ -24,8 +27,8 @@ const Ci = Components.interfaces;
  *
  * 1) Part of the logic is based on annotation service (see components/firebug-annotations.js)
  *    in order to remember whether Firebug is activated for given site or not.
- *    If there is "firebugged.showFirebug" annotation for a given site Firbug is activated.
- *    If there is "firebugged.closed" annotation for a given site Firbug is not activated.
+ *    If there is "firebugged.showFirebug" annotation for a given site Firebug is activated.
+ *    If there is "firebugged.closed" annotation for a given site Firebug is not activated.
  *
  * 2) Other part is based on extensions.firebug.allPagesActivation option. This option
  *    can be set to the following values:
@@ -36,14 +39,14 @@ const Ci = Components.interfaces;
  *    This logic has higher priority over the URL annotations.
  *    If "off" options is selected, all existing URL annotations are removed.
  */
-Firebug.Activation = Obj.extend(Firebug.Module,
+Firebug.Activation = Obj.extend(Module,
 {
     dispatchName: "activation",
 
     // called once
     initializeUI: function()
     {
-        Firebug.Module.initializeUI.apply(this, arguments);
+        Module.initializeUI.apply(this, arguments);
 
         TabWatcher.initializeUI();
         TabWatcher.addListener(this);
@@ -51,7 +54,7 @@ Firebug.Activation = Obj.extend(Firebug.Module,
 
     shutdown: function()
     {
-        Firebug.Module.shutdown.apply(this, arguments);
+        Module.shutdown.apply(this, arguments);
 
         TabWatcher.removeListener(this);
     },
@@ -66,14 +69,18 @@ Firebug.Activation = Obj.extend(Firebug.Module,
         if (Firebug.allPagesActivation == "on")
             return true;
 
-        // if about:blank gets through, issue 1483 fails
-        if (Firebug.filterSystemURLs && Url.isSystemURL(url))
-            return false;
+        // This condition has been introduced to disable Firebug for about:blank
+        // which caused issue 1483 to fail. However, there are cases when users
+        // want to inspect even system pages (such as about:blank) and don't want
+        // Firebug UI to be automatically hidden (see issue 5632).
+        // Since issue 1483 doesn't fail anymore, the condition is removed.
+        //if (Firebug.filterSystemURLs && Url.isSystemURL(url))
+        //    return false;
 
         if (userCommands)
             return true;
 
-        // document.open on a firebugged page
+        // document.open on a Firebugged page
         if (browser && browser.showFirebug && url.substr(0, 8) === "wyciwyg:")
             return true;
 

@@ -2,6 +2,7 @@
 
 define([
     "firebug/firebug",
+    "firebug/chrome/rep",
     "firebug/lib/trace",
     "firebug/lib/object",
     "firebug/lib/domplate",
@@ -9,15 +10,19 @@ define([
     "firebug/console/errorMessageRep",
     "firebug/console/errorCopy",
     "firebug/chrome/reps",
-    "firebug/js/stackFrame",
+    "firebug/debugger/stack/stackFrame",
+    "firebug/debugger/stack/stackTrace",
 ],
-function(Firebug, FBTrace, Obj, Domplate, ErrorMessageObj, ErrorMessage, ErrorCopy,
-    FirebugReps, StackFrame) {
+function(Firebug, Rep, FBTrace, Obj, Domplate, ErrorMessageObj, ErrorMessage, ErrorCopy,
+    FirebugReps, StackFrame, StackTrace) {
 
 "use strict"
 
 // ********************************************************************************************* //
 // Constants
+
+const Cc = Components.classes;
+const Ci = Components.interfaces;
 
 var {domplate, TAG} = Domplate;
 
@@ -28,7 +33,7 @@ var {domplate, TAG} = Domplate;
  * @domplate This template represents exceptions that happen in the content and appear
  * within Firebug UI. It's registered as Firebug rep.
  */
-var Exception = domplate(Firebug.Rep,
+var Exception = domplate(Rep,
 /** @lends Exception */
 {
     tag:
@@ -57,18 +62,19 @@ var Exception = domplate(Firebug.Rep,
         var url = object.fileName ? object.fileName : (win ? win.location.href : "");
         var lineNo = object.lineNumber ? object.lineNumber : 0;
         var message = this.getTitle(object);
+        var source = object.source || "";
 
         var trace;
         if (object.stack)
         {
-            trace = StackFrame.parseToStackTrace(object.stack, context);
-            trace = StackFrame.cleanStackTraceOfFirebug(trace);
+            trace = StackTrace.parseToStackTrace(object.stack, context);
+            trace = StackFrame.removeChromeFrames(trace);
 
             if (!trace)
                 lineNo = 0;
         }
 
-        var errorObject = new ErrorMessageObj(message, url, lineNo, "", "js",
+        var errorObject = new ErrorMessageObj(message, url, lineNo, source, "js",
             context, trace);
 
         if (trace && trace.frames && trace.frames[0])
@@ -87,7 +93,8 @@ var Exception = domplate(Firebug.Rep,
 // ********************************************************************************************* //
 // Registration
 
-// xxxHonza: back compatibility
+// xxxHonza: which one is needed for back compatibility
+FirebugReps.ExceptionRep = Exception;
 FirebugReps.Except = Exception;
 
 Firebug.registerRep(Exception);

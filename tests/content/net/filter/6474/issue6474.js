@@ -1,7 +1,5 @@
 function runTest()
 {
-    FBTest.sysout("issue6474.START");
-
     FBTest.openNewTab(basePath + "net/filter/6474/issue6474.html", function(win)
     {
         FBTest.enableNetPanel(function(win)
@@ -42,10 +40,10 @@ function checkNetPanelUI()
         var row = netRows[i];
         var file = FW.Firebug.getRepObject(row);
         var m = row.className.match(/category-/gi);
-        FBTest.compare(1, m.length, "There must be just one file category specified for a request: " + 
+        FBTest.compare(1, m.length, "There must be just one file category specified for a request: " +
             file.href);
     }
 
     FW.Firebug.NetMonitor.onToggleFilter(FW.Firebug.currentContext, "all");
-    FBTest.testDone("issue6474.DONE");
+    FBTest.testDone();
 }

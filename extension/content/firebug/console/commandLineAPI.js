@@ -10,6 +10,7 @@ define([
     "firebug/lib/wrapper",
 ],
 function(Xpath, Arr, Locale, System, Wrapper) {
+
 "use strict";
 
 // ********************************************************************************************* //
@@ -174,30 +175,6 @@ CommandLineAPI.getCommandLineAPI = function(context)
         return Arr.values(o);
     };
 
-    commands.debug = function(fn)
-    {
-        Firebug.Debugger.monitorFunction(fn, "debug");
-        return Firebug.Console.getDefaultReturnValue();
-    };
-
-    commands.undebug = function(fn)
-    {
-        Firebug.Debugger.unmonitorFunction(fn, "debug");
-        return Firebug.Console.getDefaultReturnValue();
-    };
-
-    commands.monitor = function(fn)
-    {
-        Firebug.Debugger.monitorFunction(fn, "monitor");
-        return Firebug.Console.getDefaultReturnValue();
-    };
-
-    commands.unmonitor = function(fn)
-    {
-        Firebug.Debugger.unmonitorFunction(fn, "monitor");
-        return Firebug.Console.getDefaultReturnValue();
-    };
-
     commands.traceAll = function()
     {
         // See issue 6220
@@ -235,19 +212,6 @@ CommandLineAPI.getCommandLineAPI = function(context)
         System.copyToClipboard(x);
         return Firebug.Console.getDefaultReturnValue();
     };
-
-    // xxxHonza: removed from 1.10 (issue 5599)
-    /*commands.memoryProfile = function(title)
-    {
-        Firebug.MemoryProfiler.start(context, title);
-        return Firebug.Console.getDefaultReturnValue();
-    };
-
-    commands.memoryProfileEnd = function()
-    {
-        Firebug.MemoryProfiler.stop(context);
-        return Firebug.Console.getDefaultReturnValue();
-    };*/
 
     return commands;
 };

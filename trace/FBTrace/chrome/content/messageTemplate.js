@@ -277,13 +277,13 @@ var MessageTemplate = domplate(Reps.Rep,
     {
         var url = stack.fileName;
 
-        // Scripts loaded using loadSubScript (e.g. loaded by a module loader)
-        // Use spcific URL syntax:
+        // Scripts loaded using loadSubScript (e.g. loaded by a module loader) use
+        // specific URL syntax:
         // loader -> script URL
         // Get the last part "script URL" in order to have meaningful URL
         var urls = url.split("->");
-        if (urls.length == 2)
-            url = Str.trim(urls[1]);
+        if (urls.length > 1)
+            url = Str.trim(urls[urls.length - 1]);
 
         return url;
     },
@@ -495,6 +495,10 @@ var MessageTemplate = domplate(Reps.Rep,
         else if (message.text && message.text.indexOf("BTI.") == 0)
         {
             message.type = "DBG_BTI";
+        }
+        else if (message.text && message.text.indexOf("!!!") == 0)
+        {
+            message.type = "DBG_EXCLAMATION";
         }
 
         var scrollingNode = outputNodes.getScrollingNode();

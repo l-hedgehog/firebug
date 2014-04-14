@@ -1,71 +1,55 @@
 /* See license.txt for terms of usage */
 
 define([
-    "firebug/lib/object",
     "firebug/firebug",
-    "firebug/lib/domplate",
-    "firebug/lib/locale",
-    "firebug/lib/events",
+    "firebug/lib/array",
     "firebug/lib/css",
     "firebug/lib/dom",
-    "firebug/lib/xml",
-    "firebug/lib/url",
-    "firebug/lib/array",
-    "firebug/js/sourceLink",
-    "firebug/chrome/menu",
+    "firebug/lib/domplate",
+    "firebug/lib/events",
+    "firebug/lib/locale",
+    "firebug/lib/object",
     "firebug/lib/options",
-    "firebug/lib/string",
     "firebug/lib/persist",
+    "firebug/lib/string",
+    "firebug/lib/url",
+    "firebug/lib/xml",
+    "firebug/chrome/menu",
+    "firebug/chrome/panel",
     "firebug/css/cssModule",
     "firebug/css/cssReps",
     "firebug/css/loadHandler",
+    "firebug/debugger/script/sourceLink",
 ],
-function(Obj, Firebug, Domplate, Locale, Events, Css, Dom, Xml, Url, Arr, SourceLink, Menu,
-    Options, Str, Persist, CSSModule, CSSInfoTip, LoadHandler) {
+function(Firebug, Arr, Css, Dom, Domplate, Events, Locale, Obj, Options, Persist, Str, Url, Xml, 
+    Menu, Panel, CSSModule, CSSReps, LoadHandler, SourceLink) {
 
-with (Domplate) {
+"use strict";
 
 // ********************************************************************************************* //
 // Constants
 
-const Cu = Components.utils;
+var Cu = Components.utils;
 
-const statusClasses = ["cssUnmatched", "cssParentMatch", "cssOverridden", "cssBestMatch"];
+var statusClasses = ["cssUnmatched", "cssParentMatch", "cssOverridden", "cssBestMatch"];
 
-// xxxHonza: shell we move this mess to lib?
+var {domplate, FOR, TAG, DIV, H1, SPAN, TABLE, TBODY, TR, TD} = Domplate;
+
+//********************************************************************************************* //
+//Module Implementation
+
 try
 {
-    // Firefox <= 22
-    // xxxHonza: broken by: https://bugzilla.mozilla.org/show_bug.cgi?id=855914
-    var scope = {};
-    Cu.import("resource:///modules/devtools/CssLogic.jsm", scope);
-    var CssLogic = scope.CssLogic;
+    // Firefox 24
+    // waiting for: https://bugzilla.mozilla.org/show_bug.cgi?id=867595
+    var scope = {}
+    Cu.import("resource://gre/modules/devtools/Loader.jsm", scope);
+    var {CssLogic} = scope.devtools.require("devtools/styleinspector/css-logic");
 }
-catch (err)
+catch (e)
 {
-    try
-    {
-        // Firefox 23
-        var scope = {}
-        Cu.import("resource:///modules/devtools/gDevTools.jsm", scope);
-        var {CssLogic} = scope.devtools.require("devtools/styleinspector/css-logic");
-    }
-    catch (err)
-    {
-        try
-        {
-            // Firefox 24
-            // waiting for: https://bugzilla.mozilla.org/show_bug.cgi?id=867595
-            var scope = {}
-            Cu.import("resource://gre/modules/devtools/Loader.jsm", scope);
-            var {CssLogic} = scope.devtools.require("devtools/styleinspector/css-logic");
-        }
-        catch (e)
-        {
-            if (FBTrace.DBG_ERRORS)
-                FBTrace.sysout("cssComputedPanel: EXCEPTION CssLogic is not available! " + e, e);
-        }
-    }
+    if (FBTrace.DBG_ERRORS)
+        FBTrace.sysout("cssComputedPanel: EXCEPTION CssLogic is not available! " + e, e);
 }
 
 // ********************************************************************************************* //
@@ -73,13 +57,13 @@ catch (err)
 
 function CSSComputedPanel() {}
 
-CSSComputedPanel.prototype = Obj.extend(Firebug.Panel,
+CSSComputedPanel.prototype = Obj.extend(Panel,
 {
     template: domplate(
     {
         computedStylesTag:
             DIV({"class": "a11yCSSView", role: "list", "aria-label":
-                Locale.$STR("aria.labels.computed styles")}),
+                Locale.$STR("a11y.labels.computed styles")}),
 
         groupedStylesTag:
             FOR("group", "$groups",
@@ -125,7 +109,7 @@ CSSComputedPanel.prototype = Obj.extend(Firebug.Panel,
                             TD({"class": "selectorName", role: "presentation"},
                                 "$selector.selector.text"),
                             TD({"class": "propValue", role: "presentation"},
-                                SPAN({"class": "stylePropValue"}, "$selector.value|formatValue")),
+                                SPAN({"class": "stylePropValue"}, "$selector|getAuthoredValue|formatValue")),
                             TD({"class": "styleSourceLink", role: "presentation"},
                                 TAG(FirebugReps.SourceLink.tag, {object: "$selector|getSourceLink"})
                             )
@@ -153,13 +137,28 @@ CSSComputedPanel.prototype = Obj.extend(Firebug.Panel,
         {
             var href = selector.href.href || selector.href;
             var line = selector.ruleLine;
-            var rule = selector.selector._cssRule._domRule;
+            var selectorDef = selector.selector;
+            // Dev tools API starting from FF 26.0 renamed the "_cssRule" property to "cssRule"
+            // (see issue 6609)
+            // TODO: This check can be removed as soon as FF 26.0 is the minimum supported version
+            var rule = selectorDef.cssRule ?
+                selectorDef.cssRule.domRule : selectorDef._cssRule._domRule;
 
             var instance = Css.getInstanceForStyleSheet(rule.parentStyleSheet);
-            var sourceLink = line != -1 ? new SourceLink.SourceLink(href, line, "css",
+            var sourceLink = line != -1 ? new SourceLink(href, line, "css",
                 rule, instance) : null;
 
             return sourceLink;
+        },
+
+        getAuthoredValue: function(selector)
+        {
+            if (Options.get("colorDisplay") !== "authored")
+                return selector.value;
+
+            var style = selector.selector.cssRule.domRule.style;
+            return style.getAuthoredPropertyValue ?
+                style.getAuthoredPropertyValue(selector.property) : selector.value;
         },
 
         formatValue: function(value)
@@ -214,16 +213,24 @@ CSSComputedPanel.prototype = Obj.extend(Firebug.Panel,
         var props = [];
         for (var i = 0; i < computedStyle.length; ++i)
         {
-            var prop = this.cssLogic ? this.cssLogic.getPropertyInfo(computedStyle[i]) :
-                Firebug.CSSModule.getPropertyInfo(computedStyle, computedStyle[i]);
-
-            if (isUnwantedProp(prop.property) ||
-                (this.cssLogic && !Firebug.showUserAgentCSS && prop.matchedRuleCount == 0))
+            // xxxsz: There's a bug in the CssLogic module, which is caused by styles inherited
+            // from inline styles of ancestor elements. See issue 7269.
+            try
             {
-                continue;
-            }
+                var prop = this.cssLogic ? this.cssLogic.getPropertyInfo(computedStyle[i]) :
+                    Firebug.CSSModule.getPropertyInfo(computedStyle, computedStyle[i]);
 
-            props.push(prop);
+                if (isUnwantedProp(prop.property) ||
+                    (this.cssLogic && !Firebug.showUserAgentCSS && prop.matchedRuleCount == 0))
+                {
+                    continue;
+                }
+
+                props.push(prop);
+            }
+            catch (e)
+            {
+            }
         }
 
         var parentNode = this.template.computedStylesTag.replace({}, this.panelNode);
@@ -419,7 +426,7 @@ CSSComputedPanel.prototype = Obj.extend(Firebug.Panel,
 
         this.onClick = Obj.bind(this.onClick, this);
 
-        Firebug.Panel.initialize.apply(this, arguments);
+        Panel.initialize.apply(this, arguments);
     },
 
     destroy: function(state)
@@ -432,21 +439,21 @@ CSSComputedPanel.prototype = Obj.extend(Firebug.Panel,
 
         Firebug.CSSModule.removeListener(this);
 
-        Firebug.Panel.destroyNode.apply(this, arguments);
+        Panel.destroyNode.apply(this, arguments);
     },
 
     initializeNode: function(oldPanelNode)
     {
         Events.addEventListener(this.panelNode, "click", this.onClick, false);
 
-        Firebug.Panel.initializeNode.apply(this, arguments);
+        Panel.initializeNode.apply(this, arguments);
     },
 
     destroyNode: function()
     {
         Events.removeEventListener(this.panelNode, "click", this.onClick, false);
 
-        Firebug.Panel.destroyNode.apply(this, arguments);
+        Panel.destroyNode.apply(this, arguments);
     },
 
     show: function(state)
@@ -629,12 +636,19 @@ CSSComputedPanel.prototype = Obj.extend(Firebug.Panel,
     showInfoTip: function(infoTip, target, x, y, rangeParent, rangeOffset)
     {
         var propValue = Dom.getAncestorByClass(target, "stylePropValue");
+        // xxxsz: This code is duplicated from CSSStyleSheetPanel. We should centralize the code somewhere,
+        // so it can be reused here
         if (propValue)
         {
             var propInfo = Firebug.getRepObject(target);
 
             var prop = propInfo.property;
-            var value = formatColor(propInfo.value);
+
+            var style = propInfo.selector ? propInfo.selector.cssRule.domRule.style : null;
+            var value = (Options.get("colorDisplay") === "authored" && style &&
+                    style.getAuthoredPropertyValue) ?
+                style.getAuthoredPropertyValue(propInfo.property) : formatColor(propInfo.value);
+
             var cssValue;
 
             if (prop == "font" || prop == "font-family")
@@ -665,10 +679,10 @@ CSSComputedPanel.prototype = Obj.extend(Firebug.Panel,
                 case "colorKeyword":
                     this.infoTipType = "color";
                     this.infoTipObject = cssValue.value;
-                    return CSSInfoTip.populateColorInfoTip(infoTip, cssValue.value);
+                    return CSSReps.CSSInfoTip.populateColorInfoTip(infoTip, cssValue.value);
 
                 case "url":
-                    if (Css.isImageRule(Xml.getElementSimpleType(propInfo), prop))
+                    if (Css.isImageProperty(prop))
                     {
                         var baseURL = typeof propInfo.href == "object" ? propInfo.href.href : propInfo.href;
                         if (!baseURL)
@@ -680,12 +694,12 @@ CSSComputedPanel.prototype = Obj.extend(Firebug.Panel,
                         this.infoTipType = "image";
                         this.infoTipObject = absURL;
 
-                        return CSSInfoTip.populateImageInfoTip(infoTip, absURL, repeat);
+                        return CSSReps.CSSInfoTip.populateImageInfoTip(infoTip, absURL, repeat);
                     }
                     break;
 
                 case "fontFamily":
-                    return CSSInfoTip.populateFontFamilyInfoTip(infoTip, cssValue.value);
+                    return CSSReps.CSSInfoTip.populateFontFamilyInfoTip(infoTip, cssValue.value);
             }
 
             delete this.infoTipType;
@@ -702,7 +716,7 @@ CSSComputedPanel.prototype = Obj.extend(Firebug.Panel,
     onCSSInsertRule: function(styleSheet, cssText, ruleIndex)
     {
         // Force update, this causes updateSelection to be called.
-        // See {@link Firebug.Panel.select}
+        // See {@link Panel.select}
         this.selection = null;
     },
 
@@ -728,9 +742,7 @@ CSSComputedPanel.prototype = Obj.extend(Firebug.Panel,
 
 function formatColor(color)
 {
-    var colorDisplay = Options.get("colorDisplay");
-
-    switch (colorDisplay)
+    switch (Options.get("colorDisplay"))
     {
         case "hex":
             return Css.rgbToHex(color);
@@ -742,7 +754,7 @@ function formatColor(color)
             return Css.colorNameToRGB(color);
 
         default:
-            return value;
+            return color;
     }
 }
 
@@ -905,4 +917,4 @@ Firebug.registerPanel(CSSComputedPanel);
 return CSSComputedPanel;
 
 // ********************************************************************************************* //
-}});
+});

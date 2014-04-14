@@ -23,6 +23,8 @@ body {
 .objectBox-stackFrame.hasTwisty,
 .objectBox-functionCall.hasTwisty,
 .netPageRow > .netCol > .netPageTitle,
+.cssComputedHeader > .twisty,
+.breakpointHeader > .twisty,
 .computedStyle.hasSelectors > .stylePropName,
 .cookieRow > .cookieNameCol > .cookieNameLabel {
     background-image: url(chrome://firebug/skin/mac/twistyClosed.svg);
@@ -41,6 +43,7 @@ body {
 .nodeBox.open > .nodeLabel > .twisty,
 .netRow.opened > .netCol > .netHrefLabel,
 .netPageRow.opened > .netCol > .netPageTitle,
+.netHeadersGroup.opened > .netInfoHeadersGroup > .twisty,
 .objectBox-stackFrame.hasTwisty.opened,
 .objectBox-functionCall.hasTwisty.opened,
 .computedStylesGroup.opened > .cssComputedHeader > .twisty,
@@ -55,7 +58,7 @@ body {
 
 .infoTip,
 .fullPanelEditor {
-    font-family: Monaco, monospace;
+    font-family: monospace;
 }
 
 /************************************************************************************************/
@@ -82,7 +85,7 @@ body {
 .arrayLeftBracket,
 .arrayRightBracket,
 .arrayComma {
-      font-family: Monaco, monospace;
+      font-family: monospace;
 }
 
 /************************************************************************************************/
@@ -92,7 +95,7 @@ body {
 .docType,
 .breakpointCode .nodeBox.containerNodeBox,
 .breakpointCode .nodeLabel {
-    font-family: Monaco, monospace;
+    font-family: monospace;
 }
 
 .nodeBox.selected > .nodeLabel > .nodeLabelBox,
@@ -127,7 +130,7 @@ body {
 /* CSS panel */
 
 .cssRule {
-    font-family: Monaco, monospace;
+    font-family: monospace;
 }
 
 /************************************************************************************************/
@@ -135,11 +138,11 @@ body {
 
 .editor-watchNewRow,
 .editor-memberRow {
-    font-family: Monaco, monospace !important;
+    font-family: monospace !important;
 }
 
 .watchRow > .memberLabelCell {
-    font-family: Monaco, monospace;
+    font-family: monospace;
 }
 
 .closeButton {
@@ -150,11 +153,11 @@ body {
 }
 
 .closeButton:hover {
-    background: url(chrome://firebug/skin/mac/closeHovered.svg) no-repeat 0 0;
+    filter: url(resource://firebugui/filters.svg#darken);
 }
 
 .closeButton:hover:active {
-    background: url(chrome://firebug/skin/mac/closePressed.svg) no-repeat 0 0;
+    filter: url(resource://firebugui/filters.svg#deepDarken);
 }
 
 /************************************************************************************************/
@@ -162,5 +165,5 @@ body {
 
 .useA11y .a11yShowFullLabel,
 .netInfoText {
-    font-family: Monaco, monospace;
+    font-family: monospace;
 }

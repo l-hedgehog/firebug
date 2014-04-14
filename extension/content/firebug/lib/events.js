@@ -1,24 +1,50 @@
 /* See license.txt for terms of usage */
-/*global define:1, Components:1, MouseEvent:1, Window: 1, Firebug:1*/
+/*global define:1, Components:1, MouseEvent:1, Firebug:1, window:1*/
 
 define([
     "firebug/lib/trace",
-    "firebug/lib/xpcom",
-    "firebug/lib/wrapper" // dependency will go away with jsd2
+    "firebug/lib/wrapper",
 ],
-function(FBTrace, Xpcom, Wrapper) {
+function(FBTrace, Wrapper) {
+
 "use strict";
 
 // ********************************************************************************************* //
 // Constants
 
-const Cu = Components.utils;
-const Ci = Components.interfaces;
-var elService = Xpcom.CCSV("@mozilla.org/eventlistenerservice;1", "nsIEventListenerService");
-var Events = {};
+var Cc = Components.classes;
+var Ci = Components.interfaces;
+
+var elService = Cc["@mozilla.org/eventlistenerservice;1"].getService(Ci.nsIEventListenerService);
 
 // ********************************************************************************************* //
+// Implementation
 
+var Events = {};
+
+/**
+ * Synchronously dispatch an event to registered listeners. Return values of individual
+ * listeners are returned in an array.
+ *
+ * The return value can be useful especially in case of asynchronous event handling.
+ * Every listener handler can return a {@link Promise} that is collected in the result array
+ * and so the initiator has a chance to wait till all events (promises) are asynchronously
+ * finished.
+ *
+ * An example:
+ *
+ * var promises = Events.dispatch("onExampleEvent", [arg1, arg2]);
+ * Promise.all(promises).then(function()
+ * {
+ *     // All event handlers finished
+ * });
+ *
+ * @param {Array} listeners Array with registered listeners.
+ * @param {String} name Name of the event being dispatched.
+ * @param {Array} args Array with arguments passed to listeners along with the event.
+ *
+ * @returns {Array} Result array with return values from individual listeners.
+ */
 Events.dispatch = function(listeners, name, args)
 {
     if (!listeners)
@@ -35,13 +61,18 @@ Events.dispatch = function(listeners, name, args)
         if (FBTrace.DBG_DISPATCH)
             noMethods = [];
 
+        var results = [];
+
         for (var i = 0; i < listeners.length; ++i)
         {
             var listener = listeners[i];
             if (!listener)
             {
                 if (FBTrace.DBG_DISPATCH || FBTrace.DBG_ERRORS)
-                    FBTrace.sysout("Events.dispatch ERROR " + i + " " + name + " to null listener.");
+                {
+                    FBTrace.sysout("Events.dispatch ERROR " + i + " " + name +
+                        " to null listener.");
+                }
                 continue;
             }
 
@@ -49,9 +80,15 @@ Events.dispatch = function(listeners, name, args)
             {
                 try
                 {
-                    listener[name].apply(listener, args);
+                    var result = listener[name].apply(listener, args);
+
+                    // Store all valid results into the result array. The only invalid
+                    // type is undefined (null, 0 can be treated as valid results in some
+                    // cases).
+                    if (typeof result != "undefined")
+                        results.push(result);
                 }
-                catch(exc)
+                catch (exc)
                 {
                     if (FBTrace.DBG_ERRORS)
                     {
@@ -62,9 +99,12 @@ Events.dispatch = function(listeners, name, args)
                         }
 
                         var culprit = listeners[i] ? listeners[i].dispatchName : null;
-                        var loc = (exc.fileName ? exc.fileName + ":" + exc.lineNumber : "<unknown>");
+                        var loc = (exc.fileName ? exc.fileName + ":" +
+                            exc.lineNumber : "<unknown>");
+
                         FBTrace.sysout("EXCEPTION in Events.dispatch " +
-                            (culprit ? culprit + "." : "") + name + ": " + exc + " in " + loc, exc);
+                            (culprit ? culprit + "." : "") + name + ": " +
+                            exc + " in " + loc, exc);
                     }
                 }
             }
@@ -76,8 +116,10 @@ Events.dispatch = function(listeners, name, args)
         }
 
         if (FBTrace.DBG_DISPATCH)
-            FBTrace.sysout("Events.dispatch " + name + " to " + listeners.length + " listeners, " +
-                noMethods.length + " had no such method", noMethods);
+        {
+            FBTrace.sysout("Events.dispatch " + name + " to " + listeners.length +
+                " listeners, " + noMethods.length + " had no such method", noMethods);
+        }
     }
     catch (exc)
     {
@@ -86,7 +128,7 @@ Events.dispatch = function(listeners, name, args)
             if (exc.stack)
             {
                 var stack = exc.stack;
-                exc.stack = stack.split('\n');
+                exc.stack = stack.split("\n");
             }
 
             var culprit = listeners[i] ? listeners[i].dispatchName : null;
@@ -94,6 +136,8 @@ Events.dispatch = function(listeners, name, args)
                 name + ": " + exc, exc);
         }
     }
+
+    return results;
 };
 
 Events.dispatch2 = function(listeners, name, args)
@@ -231,7 +275,7 @@ Events.isShift = function(event)
 // ********************************************************************************************* //
 // DOM Events
 
-const eventTypes =
+var eventTypes =
 {
     composition: [
         "composition",
@@ -319,18 +363,6 @@ const eventTypes =
         "DOMFocusIn",
         "DOMFocusOut"
     ],
-
-    // xxxHonza: As Simon says, XUL events must die!
-    /*xul: [
-        "popupshowing",
-        "popupshown",
-        "popuphiding",
-        "popuphidden",
-        "close",
-        "command",
-        "broadcast",
-        "commandupdate"
-    ],*/
 
     clipboard: [
         "cut",
@@ -425,6 +457,87 @@ Events.detachFamilyListeners = function(family, object, listener)
         object.removeEventListener(types[i], listener, false);
 };
 
+// Table of non-bubbling event types. It's mostly okay if this gets slightly out
+// of date - most event types that don't bubble are only listened to on child
+// nodes, and therefore won't incorrectly appear in any UI.
+var nonBubbling = {
+    abort: 1,
+    begin: 1,
+    beginEvent: 1,
+    blur: 1,
+    canplay: 1,
+    canplaythrough: 1,
+    durationchange: 1,
+    emptied: 1,
+    end: 1,
+    ended: 1,
+    endEvent: 1,
+    error: 1,
+    focus: 1,
+    invalid: 1,
+    load: 1,
+    loadeddata: 1,
+    loadedmetadata: 1,
+    loadend: 1,
+    loadstart: 1,
+    mouseenter: 1,
+    mouseleave: 1,
+    pagehide: 1,
+    pageshow: 1,
+    pause: 1,
+    play: 1,
+    playing: 1,
+    progress: 1,
+    ratechange: 1,
+    readystatechange: 1,
+    repeat: 1,
+    repeatEvent: 1,
+    scroll: 1,
+    seeked: 1,
+    seeking: 1,
+    select: 1,
+    show: 1,
+    stalled: 1,
+    suspend: 1,
+    SVGLoad: 1,
+    SVGUnload: 1,
+    timeupdate: 1,
+    volumechange: 1,
+    waiting: 1,
+};
+
+// Return true if a type of DOM event bubbles.
+Events.eventTypeBubbles = function(type)
+{
+    // N.B.: Technically "scroll" is a special case here, since it only bubbles
+    // from document to window. But since we are only interested in elements we
+    // can ignore that.
+    return !nonBubbling.hasOwnProperty(type);
+};
+
+// Regex for event types that bubble from elements to document and window.
+// It's okay if this gets slightly out of date - it would only imply that some
+// event types in the event panel aren't listed on the nodes but as part of
+// "document" or "window" instead.
+var reBubblesToDocument = new RegExp("^(" +
+    "animation(start|end|iteration)|" +
+    "transitionend|" +
+    "click|dblclick|wheel|mouse(down|up|move)|" +
+    "composition(start|end|update)|" +
+    "keydown|keypress|keyup|input|contextmenu|" +
+    "DOM(AttrModified|NodeRemoved|NodeRemovedFromDocument|SubtreeModified|" +
+        "CharacterDataModified|NodeInserted|NodeInsertedIntoDocument)|" +
+    "drag(|end|enter|leave|over|start)|" +
+    "drop|copy|cut|paste|" +
+    "touch(cancel|enter|leave|move|start)" +
+")$");
+
+// Return true iff a type of event can bubble up from nodes to document and window.
+Events.eventTypeBubblesToDocument = function(type)
+{
+    return reBubblesToDocument.test(type);
+};
+
 // ********************************************************************************************* //
 // Event Listeners (+ support for tracking)
 
@@ -456,7 +569,7 @@ Events.addEventListener = function(parent, eventId, listener, capturing)
 
         frames.shift();
 
-        var pid = (parent.location ? parent.location + "" : typeof parent);
+        var pid = (parent && parent.location ? String(parent.location) : typeof parent);
 
         listeners.push({
             parentId: pid,
@@ -518,36 +631,27 @@ Events.getEventListenersForTarget = function(target)
 {
     var listeners = elService.getListenerInfoFor(target, {});
     var ret = [];
-    for (var i = 0; i < listeners.length; ++i)
+    for (var i = 0; i < listeners.length; i++)
     {
         var rawListener = listeners[i];
         var listener = {
             type: rawListener.type,
+            func: rawListener.listenerObject,
             capturing: rawListener.capturing,
             allowsUntrusted: rawListener.allowsUntrusted,
-            func: null
+            target: target,
         };
-        if ("listenerObject" in rawListener)
-        {
-            listener.func = rawListener.listenerObject;
-        }
-        else
-        {
-            var debugObject = rawListener.getDebugObject();
-            listener.func = (debugObject instanceof Ci.jsdIValue && Wrapper.unwrapIValue(debugObject));
-        }
 
         // Skip chrome event listeners.
         if (!listener.func || rawListener.inSystemEventGroup)
             continue;
-        var funcGlobal = Cu.getGlobalForObject(listener.func);
-        if (!(funcGlobal instanceof Window))
-            continue;
-        if (funcGlobal.document.nodePrincipal.subsumes(document.nodePrincipal))
+
+        if (Wrapper.isChromeObject(listener.func, window))
             continue;
 
         ret.push(listener);
     }
+
     return ret;
 };
 

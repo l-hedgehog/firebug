@@ -45,6 +45,11 @@ window[chromehidden~="toolbar"] #fbToolbar {
     -moz-binding: url("firefox/bindings.xml#initializer");
     height: 270px;
     background-color: -moz-dialog;
+    font-size: 12px;
+}
+
+#mainPopupSet, #fbResumeBox {
+    font-size: initial;
 }
 
 /*************************************************************************************************/
@@ -62,6 +67,8 @@ textbox#fbCommandEditor {
 .fbCommandLineCompletionPanel {
     border: 1px solid #BEBEBE;
     border-radius: 5px;
+
+    font-size: 12px;
 
     /* Remove xul panel shadow */
     -moz-window-shadow: none !important;
@@ -104,10 +111,6 @@ textbox#fbCommandEditor {
     padding: 0 5px 0 5px;
 }
 
-.completionLine.apiCompletion {
-    font-style: italic;
-}
-
 .completionText {
     color: #666666;
     margin-right: 1px;
@@ -119,7 +122,7 @@ textbox#fbCommandEditor {
 }
 
 textbox[type="fbSearchBox"] {
-    -moz-binding: url("firefox/bindings.xml#searchBox");
+    -moz-binding: url("firefox/searchBox.xml#searchBox");
 }
 textbox[type="fbSearchBox"] .panelFocusBound {
     -moz-user-focus: normal;
@@ -149,6 +152,8 @@ panelStatus {
 
 #fbLocationList {
     -moz-binding: url("firefox/bindings.xml#panelFileList");
+    /* Evaluated scripts can take a lot of horizontal space on the toolbar, so this is the limit */
+    max-width: 250px;
 }
 
 .fbLocationListFilter {
@@ -201,23 +206,6 @@ panelTabMenu {
 
 panelTab > panelTabMenu .menuTarget {
     visibility: collapse;
-}
-
-panelTab[selected="true"] > panelTabMenu .menuTarget,
-panelTab:focus > panelTabMenu .menuTarget {
-    background: url(chrome://firebug-os/skin/optionsMenuTarget.svg) no-repeat center;
-    width: 11px;
-    height: 10px;
-    vertical-align: middle;
-    visibility: visible;
-}
-
-panelTab[selected="true"]:hover > panelTabMenu .menuTarget {
-    background: url(chrome://firebug-os/skin/optionsMenuTargetHover.svg) no-repeat center;
-}
-
-panelTab[selected="true"]:hover:active > panelTabMenu .menuTarget {
-    filter: url(resource://firebugui/filters.svg#darken);
 }
 
 panelTab > panelTabMenu .menuPopup:-moz-locale-dir(rtl) {
@@ -293,75 +281,13 @@ panelTab > panelTabMenu .menuPopup:-moz-locale-dir(rtl) {
     padding-right: 5px;
 }
 
-#fbLocationList {
-    height: 20px;
-}
-
 #fbLocationList.noTabStop > menupopup > arrowscrollbox > scrollbox,
 #fbCommandHistory > arrowscrollbox > scrollbox {
     overflow-y: auto;
 }
 
-/* Evaluated scripts can take a lot of horizontal space on the toolbar, so this is the limit */
-#fbLocationList {
-    max-width: 250px;
-}
-
 #fbLocationList .toolbarbutton-text {
     color: #000000;
-}
-
-/*************************************************************************************************/
-/* CSS Buttons */
-
-#fbScriptFilterMenu .toolbarbutton-text {
-    color: #000000;
-}
-
-/*************************************************************************************************/
-/* Script Buttons */
-
-#fbToggleCSSEditing .toolbarbutton-text {
-    padding-top: 1px;
-    padding-left: 2px;
-    padding-right: 2px;
-    color: #000000;
-}
-
-/*************************************************************************************************/
-/* Quick Info Box */
-
-#fbQuickInfoPanel {
-    border: 1px solid threedshadow;
-    background-color: white;
-    opacity: 0.9;
-    font-family: monospace;
-    font-size: 11px;
-    padding-bottom: 5px;
-    cursor: move;
-}
-
-.fbQuickInfoBoxTitle {
-    font-family: Lucida Grande, sans-serif;
-    font-size: 11px;
-    font-weight: bold;
-    margin-top: 8px;
-    margin-bottom: 0;
-    cursor: move;
-}
-
-.fbQuickInfoName {
-    color: DarkGreen;
-    margin-bottom: 0;
-    -moz-margin-end: 0;
-    cursor: move;
-}
-
-.fbQuickInfoValue {
-    color: DarkBlue;
-    margin-bottom: 0;
-    -moz-margin-start: 0;
-    cursor: move;
 }
 
 /*************************************************************************************************/
@@ -399,33 +325,4 @@ panelTab[aria-disabled='true'] {
 
 panelBarArrowscrollbox {
     -moz-binding: url("firefox/bindings.xml#panelBarArrowscrollbox");
-}
-
-panelBarTabList {
-    -moz-binding: url("firefox/bindings.xml#panelBarTabList");
-}
-
-.panelBarTabListMenuItem {
-    -moz-binding: url("firefox/bindings.xml#panelBarTabListMenuItem");
-}
-
-/*************************************************************************************************/
-/* splitmenu */
-
-menuitem.split-menuitem-item[_moz-menuactive="true"], .split-menu-right-image[_moz-menuactive="true"] {
-    background-color: -moz-menuhover;
-    color: -moz-menuhovertext;
-}
-
-.split-menu-right-image {
-    -moz-appearance: menuitem;
-    -moz-box-pack: end;
-}
-
-menu[type=splitmenu] {
-    -moz-binding: url("firefox/bindings.xml#splitmenu");
-    -moz-box-orient: horizontal;
-    -moz-appearance: none !important;
-    color: menutext;
-    background-color: transparent !important;
 }

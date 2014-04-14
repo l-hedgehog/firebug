@@ -1,6 +1,7 @@
 /* See license.txt for terms of usage */
 
 define([
+    "firebug/chrome/eventSource",
     "firebug/lib/object",
     "firebug/firebug",
     "firebug/chrome/firefox",
@@ -21,7 +22,8 @@ define([
     "firebug/net/netUtils",
     "firebug/net/netProgress",
     "firebug/lib/http",
-    "firebug/js/breakpoint",
+    "firebug/chrome/rep",
+    "firebug/debugger/breakpoints/breakpointModule",
     "firebug/net/xmlViewer",
     "firebug/net/svgViewer",
     "firebug/net/jsonViewer",
@@ -32,13 +34,13 @@ define([
     "firebug/console/errors",
     "firebug/net/netMonitor"
 ],
-function(Obj, Firebug, Firefox, Domplate, Locale, Events, Options, Url, Css, Dom, Win, Search, Str,
-    Json, Arr, ToggleBranch, DragDrop, NetUtils, NetProgress, Http) {
-
-with (Domplate) {
+function(EventSource, Obj, Firebug, Firefox, Domplate, Locale, Events, Options, Url, Css, Dom,
+    Win, Search, Str, Json, Arr, ToggleBranch, DragDrop, NetUtils, NetProgress, Http, Rep) {
 
 // ********************************************************************************************* //
 // Constants
+
+var {domplate, FOR, TAG, DIV, SPAN, TD, TR, TH, TABLE, THEAD, TBODY, P, CODE, PRE, A, IFRAME} = Domplate;
 
 const Cc = Components.classes;
 const Ci = Components.interfaces;
@@ -55,7 +57,7 @@ const reSplitIP = /^(\d+)\.(\d+)\.(\d+)\.(\d+):(\d+)$/;
 /**
  * @domplate Represents a template that is used to render basic content of the net panel.
  */
-Firebug.NetMonitor.NetRequestTable = domplate(Firebug.Rep, new Firebug.Listener(),
+Firebug.NetMonitor.NetRequestTable = domplate(Rep, new EventSource(),
 {
     inspectable: false,
 
@@ -118,8 +120,8 @@ Firebug.NetMonitor.NetRequestTable = domplate(Firebug.Rep, new Firebug.Listener(
                             Locale.$STR("net.header.Remote IP")
                         )
                     ),
-                    TD({id: "netTimeCol", width: "53%", "class": "netHeaderCell a11yFocus",
-                        "role": "columnheader"},
+                    TD({id: "netTimeCol", width: "53%", "class": "netHeaderCell netHeaderSorted a11yFocus sortedAscending",
+                        "role": "columnheader", "aria-sort": "ascending"},
                         DIV({"class": "netHeaderCellBox",
                             title: Locale.$STR("net.header.Timeline Tooltip")},
                             Locale.$STR("net.header.Timeline")
@@ -129,6 +131,11 @@ Firebug.NetMonitor.NetRequestTable = domplate(Firebug.Rep, new Firebug.Listener(
             ),
             TBODY({"class": "netTableBody", "role" : "presentation"})
         ),
+
+    limitTag:
+        DIV({"class": "panelNotificationBox collapsed"}),
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
     onClickHeader: function(event)
     {
@@ -399,7 +406,7 @@ Firebug.NetMonitor.NetRequestTable = domplate(Firebug.Rep, new Firebug.Listener(
 /**
  * @domplate Represents a template that is used to render net panel entries.
  */
-Firebug.NetMonitor.NetRequestEntry = domplate(Firebug.Rep, new Firebug.Listener(),
+Firebug.NetMonitor.NetRequestEntry = domplate(Rep, new EventSource(),
 {
     fileTag:
         FOR("file", "$files",
@@ -623,7 +630,11 @@ Firebug.NetMonitor.NetRequestEntry = domplate(Firebug.Rep, new Firebug.Listener(
             return false;
 
         //xxxsz: file.responseHeaders is undefined here for some reason
-        var resp = file.responseHeadersText.match(/www-authenticate:\s(.+)/i)[1];
+        var m = file.responseHeadersText.match(/www-authenticate:\s(.+)/i);
+        if (!m)
+            return false;
+
+        var resp = m[1];
         return (resp && resp.search(/ntlm|negotiate/i) >= 0);
     },
 
@@ -728,7 +739,7 @@ Firebug.NetMonitor.NetRequestEntry = domplate(Firebug.Rep, new Firebug.Listener(
 
 // ********************************************************************************************* //
 
-Firebug.NetMonitor.NetPage = domplate(Firebug.Rep,
+Firebug.NetMonitor.NetPage = domplate(Rep,
 {
     separatorTag:
         TR({"class": "netRow netPageSeparatorRow"},
@@ -792,7 +803,7 @@ Firebug.NetMonitor.NetPage = domplate(Firebug.Rep,
  * @domplate Represents a template that is used to render detailed info about a request.
  * This template is rendered when a request is expanded.
  */
-Firebug.NetMonitor.NetInfoBody = domplate(Firebug.Rep, new Firebug.Listener(),
+Firebug.NetMonitor.NetInfoBody = domplate(Rep, new EventSource(),
 {
     tag:
         DIV({"class": "netInfoBody", _repObject: "$file"},
@@ -848,7 +859,7 @@ Firebug.NetMonitor.NetInfoBody = domplate(Firebug.Rep, new Firebug.Listener(),
             DIV({"class": "netInfoPatchText netInfoText", "role": "tabpanel"}),
             DIV({"class": "netInfoResponseText netInfoText", "role": "tabpanel"}),
             DIV({"class": "netInfoHtmlText netInfoText", "role": "tabpanel"},
-                IFRAME({"class": "netInfoHtmlPreview", "role": "document"}),
+                IFRAME({"class": "netInfoHtmlPreview", "role": "document", "sandbox": ""}),
                 DIV({"class": "htmlPreviewResizer"})
             )
         ),
@@ -1166,7 +1177,15 @@ Firebug.NetMonitor.NetInfoBody = domplate(Firebug.Rep, new Firebug.Listener(),
             // The event is sent only for the iframes in the Console panel.
             context.addEventListener(this.htmlPreview, "load", function(event)
             {
-                event.target.contentDocument.body.innerHTML = text;
+                try
+                {
+                    event.target.contentDocument.body.innerHTML = text;
+                }
+                catch (err)
+                {
+                    if (FBTrace.DBG_ERRORS)
+                        FBTrace.sysout("net.updateInfo; EXCEPTION " + err, err);
+                }
             });
 
             var defaultHeight = parseInt(Options.get("netHtmlPreviewHeight"));
@@ -1271,7 +1290,7 @@ Firebug.NetMonitor.NetInfoBody = domplate(Firebug.Rep, new Firebug.Listener(),
  * @domplate Represents posted data within request info (the info, which is visible when
  * a request entry is expanded. This template renders content of the Post tab.
  */
-Firebug.NetMonitor.NetInfoPostData = domplate(Firebug.Rep, new Firebug.Listener(),
+Firebug.NetMonitor.NetInfoPostData = domplate(Rep, new EventSource(),
 {
     // application/x-www-form-urlencoded
     paramsTable:
@@ -1284,6 +1303,9 @@ Firebug.NetMonitor.NetInfoPostData = domplate(Firebug.Rep, new Firebug.Listener(
                             Locale.$STR("net.label.Parameters"),
                             SPAN({"class": "netInfoPostContentType"},
                                 "application/x-www-form-urlencoded"
+                            ),
+                            A({"class": "netPostParameterSort", onclick: "$onChangeSort"},
+                                "$object|getLabel"
                             )
                         )
                     )
@@ -1402,6 +1424,13 @@ Firebug.NetMonitor.NetInfoPostData = domplate(Firebug.Rep, new Firebug.Listener(
             )
         ),
 
+    getLabel: function(object)
+    {
+        return Options.get("netSortPostParameters") ?
+            Locale.$STR("netParametersDoNotSort") :
+            Locale.$STR("netParametersSortAlphabetically");
+    },
+
     getParamValueIterator: function(param)
     {
         return Firebug.NetMonitor.NetInfoBody.getParamValueIterator(param);
@@ -1409,6 +1438,8 @@ Firebug.NetMonitor.NetInfoPostData = domplate(Firebug.Rep, new Firebug.Listener(
 
     render: function(context, parentNode, file)
     {
+        Dom.clearNode(parentNode);
+
         var text = NetUtils.getPostText(file, context, true);
         if (text == undefined)
             return;
@@ -1457,7 +1488,7 @@ Firebug.NetMonitor.NetInfoPostData = domplate(Firebug.Rep, new Firebug.Listener(
         if (!params || !params.length)
             return;
 
-        var paramTable = this.paramsTable.append(null, parentNode);
+        var paramTable = this.paramsTable.append({object: null}, parentNode);
         var row = paramTable.getElementsByClassName("netInfoPostParamsTitle").item(0);
 
         Firebug.NetMonitor.NetInfoBody.headerDataTag.insertRows({headers: params}, row);
@@ -1563,7 +1594,21 @@ Firebug.NetMonitor.NetInfoPostData = domplate(Firebug.Rep, new Firebug.Listener(
         }
 
         return postData;
-    }
+    },
+    
+    onChangeSort: function(event)
+    {
+        var target = event.target;
+        var netInfoBox = Dom.getAncestorByClass(target, "netInfoBody");
+        var panel = Firebug.getElementPanel(netInfoBox);
+        var file = Firebug.getRepObject(netInfoBox);
+        var postText = netInfoBox.getElementsByClassName("netInfoPostText").item(0);
+
+        Options.togglePref("netSortPostParameters");
+        Firebug.NetMonitor.NetInfoPostData.render(panel.context, postText, file);
+
+        Events.cancelEvent(event);
+    },
 });
 
 // ********************************************************************************************* //
@@ -1572,45 +1617,62 @@ Firebug.NetMonitor.NetInfoPostData = domplate(Firebug.Rep, new Firebug.Listener(
  * @domplate Used within the Net panel to display raw source of request and response headers
  * as well as pretty-formatted summary of these headers.
  */
-Firebug.NetMonitor.NetInfoHeaders = domplate(Firebug.Rep, new Firebug.Listener(),
+Firebug.NetMonitor.NetInfoHeaders = domplate(Rep, new EventSource(),
 {
     tag:
         DIV({"class": "netInfoHeadersTable", "role": "tabpanel"},
-            DIV({"class": "netInfoHeadersGroup netInfoResponseHeadersTitle collapsed"},
-                SPAN(Locale.$STR("ResponseHeaders")),
-                SPAN({"class": "netHeadersViewSource response collapsed", onclick: "$onViewSource",
-                    _sourceDisplayed: false, _rowName: "ResponseHeaders"},
-                    Locale.$STR("net.headers.view source")
+            DIV({"class": "netHeadersGroup collapsed", "data-pref": "netResponseHeadersVisible"},
+                DIV({"class": "netInfoHeadersGroup netInfoResponseHeadersTitle"},
+                    SPAN({"class": "netHeader twisty",
+                        onclick: "$toggleHeaderContent"},
+                        Locale.$STR("ResponseHeaders")
+                    ),
+                    SPAN({"class": "netHeadersViewSource response collapsed", onclick: "$onViewSource",
+                        _sourceDisplayed: false, _rowName: "ResponseHeaders"},
+                        Locale.$STR("net.headers.view source")
+                    )
+                ),
+                TABLE({cellpadding: 0, cellspacing: 0},
+                    TBODY({"class": "netInfoResponseHeadersBody", "role": "list",
+                        "aria-label": Locale.$STR("ResponseHeaders")})
                 )
             ),
-            TABLE({cellpadding: 0, cellspacing: 0},
-                TBODY({"class": "netInfoResponseHeadersBody", "role": "list",
-                    "aria-label": Locale.$STR("ResponseHeaders")})
-            ),
-            DIV({"class": "netInfoHeadersGroup netInfoRequestHeadersTitle collapsed"},
-                SPAN(Locale.$STR("RequestHeaders")),
-                SPAN({"class": "netHeadersViewSource request collapsed", onclick: "$onViewSource",
-                    _sourceDisplayed: false, _rowName: "RequestHeaders"},
-                    Locale.$STR("net.headers.view source")
-                )
-            ),
-            TABLE({cellpadding: 0, cellspacing: 0},
-                TBODY({"class": "netInfoRequestHeadersBody", "role": "list",
+            DIV({"class": "netHeadersGroup collapsed", "data-pref": "netRequestHeadersVisible"},
+                DIV({"class": "netInfoHeadersGroup netInfoRequestHeadersTitle"},
+                    SPAN({"class": "netHeader twisty", 
+                        onclick: "$toggleHeaderContent"},
+                        Locale.$STR("RequestHeaders")),
+                    SPAN({"class": "netHeadersViewSource request collapsed", onclick: "$onViewSource",
+                        _sourceDisplayed: false, _rowName: "RequestHeaders"},
+                        Locale.$STR("net.headers.view source")
+                    )
+                ),
+                TABLE({cellpadding: 0, cellspacing: 0},
+                    TBODY({"class": "netInfoRequestHeadersBody", "role": "list",
                     "aria-label": Locale.$STR("RequestHeaders")})
+                )
             ),
-            DIV({"class": "netInfoHeadersGroup netInfoCachedResponseHeadersTitle collapsed"},
-                SPAN(Locale.$STR("CachedResponseHeaders"))
+            DIV({"class": "netHeadersGroup collapsed", "data-pref": "netCachedHeadersVisible"},
+                DIV({"class": "netInfoHeadersGroup netInfoCachedResponseHeadersTitle"},
+                    SPAN({"class": "netHeader twisty", 
+                        onclick: "$toggleHeaderContent"},
+                        Locale.$STR("CachedResponseHeaders"))
+                ),
+                TABLE({cellpadding: 0, cellspacing: 0},
+                    TBODY({"class": "netInfoCachedResponseHeadersBody", "role": "list",
+                        "aria-label": Locale.$STR("CachedResponseHeaders")})
+                )
             ),
-            TABLE({cellpadding: 0, cellspacing: 0},
-                TBODY({"class": "netInfoCachedResponseHeadersBody", "role": "list",
-                    "aria-label": Locale.$STR("CachedResponseHeaders")})
-            ),
-            DIV({"class": "netInfoHeadersGroup netInfoPostRequestHeadersTitle collapsed"},
-                SPAN(Locale.$STR("PostRequestHeaders"))
-            ),
-            TABLE({cellpadding: 0, cellspacing: 0},
-                TBODY({"class": "netInfoPostRequestHeadersBody", "role": "list",
-                    "aria-label": Locale.$STR("PostRequestHeaders")})
+            DIV({"class": "netHeadersGroup collapsed", "data-pref": "netPostRequestHeadersVisible"},
+                DIV({"class": "netInfoHeadersGroup netInfoPostRequestHeadersTitle"},
+                    SPAN({"class": "netHeader twisty", 
+                        onclick: "$toggleHeaderContent"},
+                    Locale.$STR("PostRequestHeaders"))
+                ),
+                TABLE({cellpadding: 0, cellspacing: 0},
+                    TBODY({"class": "netInfoPostRequestHeadersBody", "role": "list",
+                        "aria-label": Locale.$STR("PostRequestHeaders")})
+                )
             )
         ),
 
@@ -1620,6 +1682,24 @@ Firebug.NetMonitor.NetInfoHeaders = domplate(Firebug.Rep, new Firebug.Listener()
                 PRE({"class": "source"})
             )
         ),
+
+    toggleHeaderContent: function(event)
+    {
+        var target = event.target;
+        var headerGroup = Dom.getAncestorByClass(target, "netHeadersGroup");
+        
+        Css.toggleClass(headerGroup, "opened");
+        if (Css.hasClass(headerGroup, "opened")) 
+        {
+            headerGroup.setAttribute("aria-expanded", "true");
+            Options.set(headerGroup.dataset.pref, true);
+        }
+        else
+        {
+            headerGroup.setAttribute("aria-expanded", "false");
+            Options.set(headerGroup.dataset.pref, false);
+        }
+    },
 
     onViewSource: function(event)
     {
@@ -1671,8 +1751,9 @@ Firebug.NetMonitor.NetInfoHeaders = domplate(Firebug.Rep, new Firebug.Listener()
 
             Firebug.NetMonitor.NetInfoBody.headerDataTag.insertRows({headers: headers}, tbody);
 
-            var titleRow = Dom.getChildByClass(headersTable, "netInfo" + rowName + "Title");
-            Css.removeClass(titleRow, "collapsed");
+            var titleRow = headersTable.getElementsByClassName("netInfo" + rowName + "Title").item(0)
+            var parent = Dom.getAncestorByClass(titleRow, "netHeadersGroup");
+            Css.removeClass(parent, "collapsed");
         }
     },
 
@@ -1684,6 +1765,19 @@ Firebug.NetMonitor.NetInfoHeaders = domplate(Firebug.Rep, new Firebug.Listener()
         var file = netInfoBox.repObject;
 
         var viewSource;
+        var headers = rootNode.getElementsByClassName("netHeadersGroup");
+
+        if (Options.get("netResponseHeadersVisible"))
+            Css.setClass(headers[0], "opened");
+
+        if (Options.get("netRequestHeadersVisible"))
+            Css.setClass(headers[1], "opened");
+
+        if (Options.get("netCachedHeadersVisible"))
+            Css.setClass(headers[2], "opened");
+
+        if (Options.get("netPostRequestHeadersVisible"))
+            Css.setClass(headers[3], "opened");
 
         viewSource = rootNode.getElementsByClassName("netHeadersViewSource request").item(0);
         if (file.requestHeadersText)
@@ -1708,7 +1802,7 @@ Firebug.NetMonitor.NetInfoHeaders = domplate(Firebug.Rep, new Firebug.Listener()
 /**
  * @domplate Represents a template for a pupup tip with detailed size info.
  */
-Firebug.NetMonitor.SizeInfoTip = domplate(Firebug.Rep,
+Firebug.NetMonitor.SizeInfoTip = domplate(Rep,
 {
     tag:
         TABLE({"class": "sizeInfoTip", "id": "fbNetSizeInfoTip", role:"presentation"},
@@ -1787,80 +1881,7 @@ Firebug.NetMonitor.SizeInfoTip = domplate(Firebug.Rep,
 
 // ********************************************************************************************* //
 
-Firebug.NetMonitor.NetLimit = domplate(Firebug.Rep,
-{
-    collapsed: true,
-
-    tableTag:
-        DIV(
-            TABLE({width: "100%", cellpadding: 0, cellspacing: 0},
-                TBODY()
-            )
-        ),
-
-    limitTag:
-        TR({"class": "netRow netLimitRow", $collapsed: "$isCollapsed"},
-            TD({"class": "netCol netLimitCol", colspan: 8},
-                TABLE({cellpadding: 0, cellspacing: 0},
-                    TBODY(
-                        TR(
-                            TD(
-                                SPAN({"class": "netLimitLabel"},
-                                    Locale.$STRP("plural.Limit_Exceeded2", [0])
-                                )
-                            ),
-                            TD({style: "width:100%"}),
-                            TD(
-                                BUTTON({"class": "netLimitButton", title: "$limitPrefsTitle",
-                                    onclick: "$onPreferences"},
-                                  Locale.$STR("LimitPrefs")
-                                )
-                            ),
-                            TD("&nbsp;")
-                        )
-                    )
-                )
-            )
-        ),
-
-    isCollapsed: function()
-    {
-        return this.collapsed;
-    },
-
-    onPreferences: function(event)
-    {
-        Win.openNewTab("about:config");
-    },
-
-    updateCounter: function(row)
-    {
-        Css.removeClass(row, "collapsed");
-
-        // Update info within the limit row.
-        var limitLabel = row.getElementsByClassName("netLimitLabel").item(0);
-        limitLabel.firstChild.nodeValue = Locale.$STRP("plural.Limit_Exceeded2",
-            [row.limitInfo.totalCount]);
-    },
-
-    createTable: function(parent, limitInfo)
-    {
-        var table = this.tableTag.replace({}, parent);
-        var row = this.createRow(table.firstChild.firstChild, limitInfo);
-        return [table, row];
-    },
-
-    createRow: function(parent, limitInfo)
-    {
-        var row = this.limitTag.insertRows(limitInfo, parent, this)[0];
-        row.limitInfo = limitInfo;
-        return row;
-    }
-});
-
-// ********************************************************************************************* //
-
-Firebug.NetMonitor.ResponseSizeLimit = domplate(Firebug.Rep,
+Firebug.NetMonitor.ResponseSizeLimit = domplate(Rep,
 {
     tag:
         DIV({"class": "netInfoResponseSizeLimit"},
@@ -1892,4 +1913,4 @@ Firebug.registerRep(Firebug.NetMonitor.NetRequestTable);
 return Firebug.NetMonitor.NetRequestTable;
 
 // ********************************************************************************************* //
-}});
+});

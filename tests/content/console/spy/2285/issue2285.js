@@ -4,8 +4,6 @@ var FF22OrHigher = versionChecker.compare(appInfo.version, "21.*") >= 0;
 
 function runTest()
 {
-    FBTest.sysout("issue2285.START");
-
     FBTest.openNewTab(basePath + "console/spy/2285/issue2285.html", function(win)
     {
         FBTest.enableConsolePanel(function()
@@ -38,12 +36,12 @@ function runTest()
                         // Otherwise only the first part of the multipart XHR is displayed.
                         var response = Cc["@mozilla.org/network/http-activity-distributor;1"]
                             ? "Part0+Part1+Part2+Part3+" : "Part0+";
-                        FBTest.compare(response, responseBody.textContent, "Response text must match."); 
+                        FBTest.compare(response, responseBody.textContent, "Response text must match.");
                     }
                 }
 
                 // Finish test
-                FBTest.testDone("issue2285.DONE");
+                FBTest.testDone();
             };
 
             win.document.addEventListener("test-done", testDone, false);

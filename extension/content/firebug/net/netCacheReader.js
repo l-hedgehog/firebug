@@ -2,6 +2,7 @@
 
 define([
     "firebug/firebug",
+    "firebug/chrome/module",
     "firebug/lib/object",
     "firebug/lib/locale",
     "firebug/lib/trace",
@@ -11,7 +12,7 @@ define([
     "firebug/net/netUtils",
     "firebug/lib/domplate",
 ],
-function(Firebug, Obj, Locale, FBTrace, Dom, Css, NetMonitor, NetUtils, Domplate) {
+function(Firebug, Module, Obj, Locale, FBTrace, Dom, Css, NetMonitor, NetUtils, Domplate) {
 
 "use strict"
 
@@ -26,6 +27,9 @@ var CacheService = Cc["@mozilla.org/network/cache-service;1"];
 
 var cacheSession = null;
 var autoFetchDelay = 1000;
+
+var TraceError = FBTrace.toError();
+var Trace = FBTrace.to("DBG_NETCACHEREADER");
 
 // ********************************************************************************************* //
 // Domplate Templates
@@ -45,25 +49,27 @@ var cacheBodyTag =
 /**
  * @module Responsible for fetching given URL entry from the browser cache. The Net panel
  * displays such info for requests that are stored in the cache.
- *
- * The cache descriptor is fetched asynchronously when the user expands a requests row
- * within the Net panel. Note that opening the cache descriptor during the page load can
- * influence the caching logic (see issue 6385).
  */
-var NetCacheReader = Obj.extend(Firebug.Module,
+var NetCacheReader = Obj.extend(Module,
 /** @lends NetCacheReader */
 {
     dispatchName: "netCacheReader",
 
     // Set to true if cache-data should be fetched automatically.
-    autoFetch: false,
+    // It's set to true by default since the Net panel needs to display
+    // file size (coming from the cache) for all requests immediately
+    // (see issue 6837).
+    // The cache descriptor was previously fetched asynchronously when the
+    // user expanded a requests row (see issue 6385), but his problem
+    // isn't reproducible any more.
+    autoFetch: true,
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
     // Initialization
 
     initialize: function()
     {
-        Firebug.Module.initialize.apply(this, arguments);
+        Module.initialize.apply(this, arguments);
 
         // Register a listener so, we can create a custom info tab within request info body.
         NetMonitor.NetInfoBody.addListener(this);
@@ -71,7 +77,7 @@ var NetCacheReader = Obj.extend(Firebug.Module,
 
     shutdown: function()
     {
-        Firebug.Module.shutdown.apply(this, arguments);
+        Module.shutdown.apply(this, arguments);
 
         NetMonitor.NetInfoBody.removeListener(this);
     },
@@ -172,10 +178,7 @@ var NetCacheReader = Obj.extend(Firebug.Module,
         catch (exc)
         {
             if (exc.name != "NS_ERROR_CACHE_KEY_NOT_FOUND")
-            {
-                if (FBTrace.DBG_ERRORS)
-                    FBTrace.sysout("net.getCacheEntry; FAILS " + file.href, exc);
-            }
+                TraceError.sysout("netCacheReader.getCacheEntry; ERROR " + file.href, exc);
         }
     }
 });
@@ -188,8 +191,7 @@ function fetchCacheEntry(file, netProgress)
     if (file.cacheEntry)
         return;
 
-    if (FBTrace.DBG_NET_EVENTS)
-        FBTrace.sysout("net.getCacheEntry; file.href: " + file.href);
+    Trace.sysout("netCacheReader.getCacheEntry; file.href: " + file.href);
 
     // Initialize cache session.
     if (!cacheSession)
@@ -203,8 +205,7 @@ function fetchCacheEntry(file, netProgress)
     {
         onCacheEntryAvailable: function(descriptor, accessGranted, status)
         {
-            if (FBTrace.DBG_NET_EVENTS)
-                FBTrace.sysout("net.onCacheEntryAvailable; file.href: " + file.href);
+            Trace.sysout("netCacheReader.onCacheEntryAvailable; file.href: " + file.href);
 
             if (descriptor)
                 onDescriptorAvailable(netProgress, file, descriptor);
@@ -216,6 +217,8 @@ function fetchCacheEntry(file, netProgress)
 
 function onDescriptorAvailable(netProgress, file, descriptor)
 {
+    Trace.sysout("netCacheReader.onDescriptorAvailable; file.href: " + file.href, descriptor);
+
     if (file.size <= 0)
         file.size = descriptor.dataSize;
 
@@ -262,8 +265,7 @@ function onDescriptorAvailable(netProgress, file, descriptor)
     }
     catch (e)
     {
-        if (FBTrace.DBG_ERRORS)
-            FBTrace.sysout("net.onCacheEntryAvailable; EXCEPTION " + e, e);
+        TraceError.sysout("netCacheReader.onCacheEntryAvailable; EXCEPTION " + e, e);
     }
 
     descriptor.close();

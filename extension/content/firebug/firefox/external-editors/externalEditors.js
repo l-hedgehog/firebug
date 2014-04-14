@@ -1,6 +1,7 @@
 /* See license.txt for terms of usage */
 
 define([
+    "firebug/chrome/module",
     "firebug/lib/lib",
     "firebug/lib/object",
     "firebug/firebug",
@@ -8,17 +9,19 @@ define([
     "firebug/lib/xpcom",
     "firebug/lib/url",
     "firebug/lib/string",
-    "firebug/js/sourceLink",
+    "firebug/debugger/script/sourceLink",
     "firebug/lib/css",
     "firebug/lib/system",
     "firebug/lib/array",
     "firebug/lib/dom",
     "firebug/chrome/menu",
     "firebug/trace/debug",
-    "firebug/chrome/firefox"
+    "firebug/chrome/firefox",
+    "firebug/firefox/external-editors/editors",
+    "firebug/lib/options",
 ],
-function(FBL, Obj, Firebug, Locale, Xpcom, Url, Str, SourceLink, Css, System, Arr, Dom,
-    Menu, Debug, Firefox) {
+function(Module, FBL, Obj, Firebug, Locale, Xpcom, Url, Str, SourceLink, Css, System, Arr, Dom,
+    Menu, Debug, Firefox, Editors, Options) {
 
 // ********************************************************************************************* //
 // Constants
@@ -43,13 +46,13 @@ var temporaryDirectory = null;
 // ********************************************************************************************* //
 // Module Implementation
 
-Firebug.ExternalEditors = Obj.extend(Firebug.Module,
+Firebug.ExternalEditors = Obj.extend(Module,
 {
     dispatchName: "externalEditors",
 
     initializeUI: function()
     {
-        Firebug.Module.initializeUI.apply(this, arguments);
+        Module.initializeUI.apply(this, arguments);
 
         Firebug.registerUIListener(this);
         this.loadExternalEditors();
@@ -96,8 +99,8 @@ Firebug.ExternalEditors = Obj.extend(Firebug.Module,
         const editorPrefNames = ["label", "executable", "cmdline", "image"];
 
         externalEditors = [];
-        var prefDomain = Firebug.Options.getPrefDomain();
-        var list = Firebug.Options.getPref(prefDomain, prefName).split(",");
+        var prefDomain = Options.getPrefDomain();
+        var list = Options.getPref(prefDomain, prefName).split(",");
 
         for (var i=0; i<list.length; ++i)
         {
@@ -110,7 +113,7 @@ Firebug.ExternalEditors = Obj.extend(Firebug.Module,
             {
                 try
                 {
-                    item[editorPrefNames[j]] = Firebug.Options.getPref(prefDomain,
+                    item[editorPrefNames[j]] = Options.getPref(prefDomain,
                         prefName + "." + editorId + "." + editorPrefNames[j]);
                 }
                 catch(exc)
@@ -193,14 +196,9 @@ Firebug.ExternalEditors = Obj.extend(Firebug.Module,
 
     openEditorList: function()
     {
-        var args = {
-            FBL: FBL,
-            prefName: prefDomain + ".externalEditors"
-        };
-
         Firefox.openWindow("Firebug:ExternalEditors",
             "chrome://firebug/content/firefox/external-editors/editors.xul",
-            "", args);
+            "", new Editors(prefDomain + ".externalEditors"));
     },
 
     onContextMenu: function(items, object, target, context, panel, popup)
@@ -208,7 +206,7 @@ Firebug.ExternalEditors = Obj.extend(Firebug.Module,
         if (!this.count())
             return
 
-        if (object instanceof SourceLink.SourceLink)
+        if (object instanceof SourceLink)
         {
             this.appendContextMenuItem(popup, object.href, object.line);
         }
@@ -228,8 +226,8 @@ Firebug.ExternalEditors = Obj.extend(Firebug.Module,
     createContextMenuItem: function(doc)
     {
         var item = doc.createElement("menu");
-        item.setAttribute("type", "splitmenu");
         item.setAttribute("iconic", "true");
+        item.setAttribute("label", Locale.$STR("firebug.OpenWith"));
 
         item.addEventListener("command", function(event)
         {
@@ -263,19 +261,22 @@ Firebug.ExternalEditors = Obj.extend(Firebug.Module,
             item = item.cloneNode(true);
             item.hidden = false;
             item.removeAttribute("openFromContext");
+
+            item.setAttribute("image", editor.image);
+            item.setAttribute("label", editor.label);
+            item.value = editor.id;
         }
         else
         {
             item = this.createContextMenuItem(doc);
         }
 
-        item.setAttribute("image", editor.image);
-        item.setAttribute("label", editor.label);
-        item.value = editor.id;
-
         popup.appendChild(item);
 
-        this.lastSource={url: url, line: line};
+        this.lastSource = {
+            url: url,
+            line: line
+        };
     },
 
     onContextMenuCommand: function(event)
@@ -568,7 +569,8 @@ Firebug.ExternalEditors = Obj.extend(Firebug.Module,
         return file;
     },
 
-    deleteTemporaryFiles: function()  // TODO call on "shutdown" event to modules
+    // TODO call on "shutdown" event to modules
+    deleteTemporaryFiles: function()
     {
         try
         {
@@ -610,6 +612,7 @@ function fixupFilePath(path)
 }
 
 // object.extend doesn't handle getters
+// xxxHonza: now it does we should fix this.
 Firebug.ExternalEditors.__defineGetter__("pathTransformations",
     lazyLoadUrlMappings.bind(Firebug.ExternalEditors, "pathTransformations"));
 
