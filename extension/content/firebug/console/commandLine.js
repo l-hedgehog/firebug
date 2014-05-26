@@ -40,7 +40,6 @@ function(Firebug, FBTrace, Obj, Locale, Events, Url, Dom, System, Str, Persist, 
 
 var Cc = Components.classes;
 
-var commandPrefix = ">>> ";
 var Trace = FBTrace.to("DBG_COMMANDLINE");
 var TraceError = FBTrace.toError();
 
@@ -266,15 +265,15 @@ var CommandLine = Obj.extend(Module,
         if (expr === "")
             return;
 
-        if (!Firebug.commandEditor || context.panelName !== "console")
+        if (!Options.get("commandEditor") || context.panelName !== "console")
         {
             this.clear(context);
-            Firebug.Console.log(commandPrefix + expr, context, "command", FirebugReps.Command);
+            Firebug.Console.log(expr, context, "command", FirebugReps.Command);
         }
         else
         {
             var shortExpr = Str.cropString(Str.stripNewLines(expr), 100);
-            Firebug.Console.log(commandPrefix + shortExpr, context, "command",
+            Firebug.Console.log(shortExpr, context, "command",
                 FirebugReps.Command);
         }
 
@@ -520,7 +519,7 @@ var CommandLine = Obj.extend(Module,
         this.setAutoCompleter();
         this.commandHistory = new Firebug.CommandHistory();
 
-        if (Firebug.commandEditor)
+        if (Options.get("commandEditor"))
             this.setMultiLine(true, Firebug.chrome);
     },
 
@@ -735,7 +734,7 @@ var CommandLine = Obj.extend(Module,
 
     getCommandLine: function(context)
     {
-        return (!this.isInOtherPanel(context) && Firebug.commandEditor) ?
+        return (!this.isInOtherPanel(context) && Options.get("commandEditor")) ?
             this.getCommandEditor():
             this.getSingleRowCommandLine();
     },
@@ -749,7 +748,7 @@ var CommandLine = Obj.extend(Module,
 
     getExpression: function(context)
     {
-        return (!this.isInOtherPanel(context) && Firebug.commandEditor) ?
+        return (!this.isInOtherPanel(context) && Options.get("commandEditor")) ?
             this.getCommandEditor().getExpression() :
             this.getSingleRowCommandLine().value;
     },
@@ -813,7 +812,7 @@ function evaluateExpression(execContextType, expr, context, thisValue, targetWin
             if (Console.isDefaultReturnValue(result))
                 return;
 
-            successConsoleFunction(result, context);
+            successConsoleFunction.apply(null, arguments);
         };
     }
 

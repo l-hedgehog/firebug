@@ -15,10 +15,6 @@ function(FBTrace, Wrapper, Xpcom) {
 
 var Cu = Components.utils;
 
-var comparator = Xpcom.CCSV("@mozilla.org/xpcom/version-comparator;1", "nsIVersionComparator");
-var appInfo = Xpcom.CCSV("@mozilla.org/xre/app-info;1", "nsIXULAppInfo");
-var pre27 = (comparator.compare(appInfo.version, "27.0*") < 0);
-
 var global = Cu.getGlobalForObject({});
 Cu.import("resource://gre/modules/jsdebugger.jsm", {}).addDebuggerToGlobal(global);
 
@@ -94,22 +90,11 @@ DebuggerLib.getInactiveDebuggeeGlobal = function(context, global)
     return dbgGlobal;
 };
 
-// temporary version-dependent check, should be removed when minVersion = 27
-DebuggerLib._closureInspectionRequiresDebugger = function()
-{
-    return !pre27;
-};
-
 /**
  * Runs a callback with a debugger for a global temporarily enabled.
  */
 DebuggerLib.withTemporaryDebugger = function(context, global, callback)
 {
-    // Pre Fx27, cheat and pass a disabled debugger, because closure inspection
-    // works with disabled debuggers, and that's all we need this API for.
-    if (!DebuggerLib._closureInspectionRequiresDebugger())
-        return callback(DebuggerLib.getInactiveDebuggeeGlobal(context, global));
-
     var dbg = getInactiveDebuggerForContext(context);
     if (dbg.hasDebuggee(global))
         return callback(DebuggerLib.getInactiveDebuggeeGlobal(context, global));
@@ -238,6 +223,7 @@ DebuggerLib.getThreadDebuggeeGlobalForContext = function(context, global)
 
 DebuggerLib.getThreadDebuggeeGlobalForFrame = function(frame)
 {
+    // For Firefox 29 and up this should always work (bug 958646).
     if (frame.script && frame.script.global)
         return frame.script.global;
 
@@ -246,7 +232,7 @@ DebuggerLib.getThreadDebuggeeGlobalForFrame = function(frame)
         if (frame.type === "call")
             return frame.callee.global;
 
-        // Even though |frame.this| returns a debuggee window, it is not the Debuggee 
+        // Even though |frame.this| returns a debuggee window, it is not the Debuggee
         // global instance. So rather return |frame.this.global|.
         if (frame.type === "global")
             return frame.this.global;
@@ -258,6 +244,20 @@ DebuggerLib.getThreadDebuggeeGlobalForFrame = function(frame)
     // We've gone through the frame chain, but couldn't get the global object. Abandon.
     TraceError.sysout("DebuggerLib.getThreadDebuggeeGlobalForFrame; can't get the global object");
     return null;
+};
+
+/**
+ * Creates a grips for a given object (value).
+ *
+ * @param {TabContext} context
+ * @param {*} value The object to transform into a grip
+ *
+ * @return {Grip} The grip
+ */
+DebuggerLib.createValueGrip = function(context, value)
+{
+    var actor = DebuggerLib.getThreadActor(context.browser);
+    return actor.createValueGrip(value);
 };
 
 // ********************************************************************************************* //
@@ -365,17 +365,23 @@ DebuggerLib.getNextExecutableLine = function(context, aLocation)
 
 DebuggerLib.isExecutableLine = function(context, location)
 {
-    var threadClient = this.getThreadActor(context.browser);
+    var threadActor = this.getThreadActor(context.browser);
+    if (!threadActor.dbg)
+    {
+        TraceError.sysout("debuggerClient.isExecutableLine; ERROR No debugger, " +
+            "Script panel disabled?");
+        return;
+    }
 
-    // Use 'innermost' property so, the result is (almost) always just one script object
-    // and we can save time in the loop below. See: https://wiki.mozilla.org/Debugger
+    // Set 'innermost' property to false to get any script that is presented
+    // on the specified line (see also issue 7176).
     var query = {
         url: location.url,
         line: location.line,
-        innermost: true,
+        innermost: false,
     };
 
-    var scripts = threadClient.dbg.findScripts(query);
+    var scripts = threadActor.dbg.findScripts(query);
     for (var i = 0; i < scripts.length; i++)
     {
         var script = scripts[i];
@@ -385,6 +391,87 @@ DebuggerLib.isExecutableLine = function(context, location)
     }
 
     return false;
+};
+
+/**
+ * xxxHonza: related to issue 1238. This is how we could get executable lines
+ * for pretty printed scripts (based on source maps). WIP
+ *
+ * Source maps terminology:
+ * 1) original (the running ugly code)
+ * 2) generated (the pretty not really running code)
+ *
+ * Notes:
+ * 1) Not optimized and returns all lines
+ * 2) Should be done in a worker probably
+ * 3) Some tracing should be removed
+ */
+DebuggerLib.getExecutableLines = function(context, sourceFile)
+{
+    var lines = new Array();
+    if (!sourceFile.isPrettyPrinted)
+        return;
+
+    var url = sourceFile.href;
+    var threadActor = this.getThreadActor(context.browser);
+
+    var query = {
+        url: url,
+    };
+
+    var scripts = threadActor.dbg.findScripts(query);
+    //FBTrace.sysout("scripts " + url, lines);
+
+    for (var i = 0; i < scripts.length; i++)
+    {
+        var script = scripts[i];
+        var offsets = script.getAllColumnOffsets();
+        for (var j = 0; j < offsets.length; j++)
+        {
+            var offset = offsets[j];
+            var cols = lines[offset.lineNumber];
+            if (!cols)
+                cols = lines[offset.lineNumber] = new Array();
+
+            cols.push(offset.columnNumber);
+        }
+    }
+
+    //FBTrace.sysout("lines " + url, lines);
+
+    var exeLines = new Array();
+    var sources = threadActor.sources;
+
+    var sourceActor = threadActor.threadLifetimePool.get(sourceFile.actor);
+
+    //FBTrace.sysout("_sourceMapsByGeneratedSource[url]", sourceActor._sourceMap);
+
+    for (var i = 0; i < lines.length; i++)
+    {
+        var columns = lines[i];
+        if (!columns)
+            continue;
+
+        for (var j = 0; j < columns.length; j++)
+        {
+            var col = columns[j];
+            var location = {
+                url: url,
+                line: i,
+                column: col,
+            }
+
+            sources.getOriginalLocation(location).then((loc) =>
+            {
+                //FBTrace.sysout("org [" + i + ":" + col + "] -> [" + loc.line + ":" +
+                //    loc.column + "]", loc);
+
+                exeLines[loc.line] = loc.line;
+            });
+        }
+    }
+
+    return exeLines;
 };
 
 // ********************************************************************************************* //

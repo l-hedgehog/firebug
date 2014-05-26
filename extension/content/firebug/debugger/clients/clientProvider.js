@@ -62,18 +62,17 @@ ClientProvider.prototype =
     {
         var text;
 
-        if (object instanceof ObjectClient)
-            text = object.name;
-
-        if (object instanceof ObjectClient.Property)
-            text = object.name;
-
-        if (object && Obj.isFunction(object.getName))
+        if (object instanceof Grip)
+        {
             text = object.getName();
-
-        // Support for string type (children are String instances).
-        if (typeof(object) == "string")
+        }
+        else if (typeof(object) == "string")
+        {
+            // xxxHonza: is this what we want to have here?
+            // it causes getId to return value of string objects.
+            // Support for string type (children are String instances).
             text = object;
+        }
 
         if (!text)
             return text;
@@ -90,6 +89,11 @@ ClientProvider.prototype =
 
     getValue: function(object)
     {
+        // Avoid NPE later in the method. If the object is null or undefined
+        // just return it as the result value.
+        if (object == null)
+            return object;
+
         if (object instanceof ObjectClient)
         {
             // If the client object couldn't get data from the server, return the error
@@ -99,11 +103,8 @@ ClientProvider.prototype =
                 return new ErrorCopy(object.error.message);
         }
 
-        if (Obj.isFunction(object.getValue))
+        if (object instanceof Grip)
             return object.getValue();
-
-        if (object instanceof ObjectClient)
-            return object.value;
 
         return object;
     },
@@ -138,7 +139,10 @@ ClientProvider.prototype =
 
         if (object instanceof Grip)
         {
-            actor = object.getActor();
+            if (typeof object.grip === "object")
+                actor = object.getActor();
+            else
+                return object.grip;
         }
         else
         {

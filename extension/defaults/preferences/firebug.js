@@ -1,7 +1,6 @@
-// For a detailed description of all preferences see http://getfirebug.com/wiki/index.php/Firebug_Preferences
+// For a detailed description of all preferences see https://getfirebug.com/wiki/index.php/Firebug_Preferences
 
 // Global
-pref("extensions.firebug.architecture", "inProcess");
 pref("extensions.firebug.defaultModuleList", "");
 
 pref("javascript.options.strict.debug", false);
@@ -16,7 +15,7 @@ pref("extensions.firebug.showErrorCount", true);
 pref("extensions.firebug.viewPanelOrient", false);
 pref("extensions.firebug.allPagesActivation", "none");
 pref("extensions.firebug.hiddenPanels2", "");
-pref("extensions.firebug.panelTabMinWidth", 50);
+pref("extensions.firebug.panelTabMinWidth", 60);
 pref("extensions.firebug.sourceLinkLabelWidth", 17);
 pref("extensions.firebug.currentVersion", "");
 pref("extensions.firebug.showFirstRunPage", true);
@@ -37,6 +36,7 @@ pref("extensions.firebug.serverMode", false);
 // Command line
 pref("extensions.firebug.commandEditor", false);
 pref("extensions.firebug.alwaysShowCommandLine", false);
+pref("extensions.firebug.debugCommandLineAPI", false);
 
 // Search
 pref("extensions.firebug.searchCaseSensitive", false);
@@ -95,12 +95,15 @@ pref("extensions.firebug.colorDisplay", "authored");
 pref("extensions.firebug.computedStylesDisplay", "grouped");
 pref("extensions.firebug.showMozillaSpecificStyles", false);
 
+// Events
+pref("extensions.firebug.showWrappedListeners", true);
+
 // Script
 pref("extensions.firebug.breakOnErrors", false);
 pref("extensions.firebug.trackThrowCatch", false);
 pref("extensions.firebug.script.enableSites", false);
 pref("extensions.firebug.scriptsFilter", "all");
-pref("extensions.firebug.replaceTabs", 4);
+pref("extensions.firebug.replaceTabs", 2);
 pref("extensions.firebug.filterSystemURLs", true);
 pref("extensions.firebug.maxScriptLineLength", 10000);
 pref("extensions.firebug.breakOnExceptions", false);
@@ -183,6 +186,3 @@ pref("extensions.firebug.key.shortcut.toggleBreakOn", "accel alt b");
 
 // Accessibility
 pref("extensions.firebug.a11y.enable", false);
-
-// Known Issues
-pref("extensions.firebug.showSlowJSDMessage", true);

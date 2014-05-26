@@ -35,14 +35,13 @@ define([
     "firebug/debugger/script/scriptPanelLineUpdater",
     "firebug/debugger/debuggerLib",
     "firebug/console/commandLine",
-    "firebug/net/netUtils",
     "arch/compilationunit",
 ],
 function (Firebug, FBTrace, Obj, Locale, Events, Dom, Arr, Css, Url, Domplate, Persist, Keywords,
     System, Options, Promise, ActivablePanel, Menu, Rep, StatusPath, SearchBox, Editor, ScriptView,
     StackFrame, SourceLink, SourceFile, Breakpoint, BreakpointStore, BreakpointConditionEditor,
     BreakOnNext, ScriptPanelWarning, BreakNotification, ScriptPanelLineUpdater,
-    DebuggerLib, CommandLine, NetUtils, CompilationUnit) {
+    DebuggerLib, CommandLine, CompilationUnit) {
 
 "use strict";
 
@@ -134,6 +133,13 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
 
         Firebug.unregisterUIListener(this);
 
+        // Stop marking executable lines.
+        if (this.context.markExeLinesTimeout)
+        {
+            this.context.clearTimeout(this.context.markExeLinesTimeout);
+            this.context.markExeLinesTimeout = null;
+        }
+
         BasePanel.destroy.apply(this, arguments);
     },
 
@@ -189,9 +195,9 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
 
         // These buttons are visible only, if debugger is enabled.
         this.showToolbarButtons("fbBonButtons", active);
-        this.showToolbarButtons("fbLocationSeparator", active);
-        this.showToolbarButtons("fbDebuggerButtons", active);
+        this.showToolbarButtons("fbLocationSeparator", false);
         this.showToolbarButtons("fbLocationButtons", active);
+        this.showToolbarButtons("fbDebuggerButtons", active);
         this.showToolbarButtons("fbScriptButtons", active);
         this.showToolbarButtons("fbStatusButtons", active);
         this.showToolbarButtons("fbLocationList", active);
@@ -279,7 +285,7 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
 
         // Clear the stack on the panel toolbar, but only if the Script panel is
         // the currently selected panel.
-        if (Firebug.chrome.getSelectedPanel() == this)
+        if (this.isSelected())
             StatusPath.clear();
 
         this.updateInfoTip();
@@ -535,6 +541,11 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
         return this.normalizeLocation(this.location);
     },
 
+    getSourceFile: function()
+    {
+        return this.context.getSourceFile(this.location.href);
+    },
+
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
     // ActivablePanel
 
@@ -564,8 +575,9 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
     {
         Trace.sysout("scriptPanel.framesadded;", stackTrace);
 
-        // Invoke breadcrumbs update.
+        // Invoke synchronous breadcrumbs update.
         Firebug.chrome.syncStatusPath();
+        StatusPath.flush();
 
         // Do not use: Firebug.chrome.select(this.context.currentFrame, "script");
         // at this moment. Since it invokes updateSelection, showStackFrame and
@@ -573,6 +585,18 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
         // is visible to the user. It's wrong in the case where the user just
         // executed an expression on the command line, which also causes 'framesadded'
         // to be received (through clearScopes). See also issue 7028.
+
+        // If frames are added make sure to update the selection (issue 7320)
+        this.selection = this.context.currentFrame;
+
+        // xxxHonza: Script panel side-panels derive the current selection object from
+        // the Script panel (see onSelectedSidePanel in chrome.js) and those selection
+        // should be also updated. How to do it properly?
+        // There doesn't seem to be a public problem with this, but the internal state
+        // should be correct.
+        // Note that the way how selection of side panels is derived from the main
+        // panel has been rather confusing over time, but extension might depend
+        // on it, so it's rather hard to change it.
     },
 
     framescleared: function()
@@ -641,8 +665,7 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
             //     it's guessed according to the file extension.
             // 3) Get the type/category from the content type.
             var sourceFile = SourceFile.getSourceFileByUrl(this.context, sourceLink.href);
-            var mimeType = NetUtils.getMimeType(sourceFile.contentType, sourceFile.href);
-            var category = NetUtils.getCategory(mimeType);
+            var category = sourceFile.getCategory();
 
             // Display the source.
             this.scriptView.showSource(lines.join(""), category);
@@ -650,10 +673,13 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
             var options = sourceLink.getOptions();
 
             // Make sure the current execution line is marked if the current frame
-            // is coming from the same location.
+            // is coming from the same location. Otherwise the 'debug location' flag
+            // must be removed.
             var frame = this.context.currentFrame;
             if (frame && frame.href == this.location.href)
                 this.setDebugLocation(frame.line - 1, true);
+            else
+                options.debugLocation = false;
 
             // If the location object is SourceLink automatically scroll to the
             // specified line. Otherwise make sure to reset the scroll position
@@ -665,6 +691,18 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
         }
 
         compilationUnit.getSourceLines(-1, -1, callback.bind(this));
+    },
+
+    onSourceLoaded: function(sourceFile, lines)
+    {
+        Trace.sysout("debugger.SourceLoaded; " + sourceFile.href);
+
+        if (!this.location || this.location.href != sourceFile.href)
+            return;
+
+        this.scriptView.showSource(sourceFile.lines.join(""), "js");
+
+        this.context.invalidatePanels("breakpoints");
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -691,7 +729,7 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
                 return true;
 
             var lineNo = +m[1];
-            if (!isNaN(lineNo) && 0 < lineNo && lineNo <= this.editor.getLineCount())
+            if (!isNaN(lineNo) && 0 < lineNo && lineNo <= this.scriptView.editor.getLineCount())
             {
                 this.scrollToLine(lineNo, {highlight: true});
                 return true;
@@ -1123,10 +1161,22 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
         if (bp.href != url)
             return;
 
-        Trace.sysout("scriptPanel.onBreakpointRemoved;", bp);
+        var bps = [];
+        this.getBreakpoints(bps);
+
+        // Don't remove the icon from the breakpoint column if there is still
+        // a breakpoint in the store (see also issue 7372).
+        for (var tempBp of bps)
+        {
+            if (tempBp.lineNo == bp.lineNo)
+                return;
+        }
 
         // Remove breakpoint from the UI.
         this.scriptView.removeBreakpoint(bp);
+
+        Trace.sysout("scriptPanel.onBreakpointRemoved;", bp);
+
         var editor = this.scriptView.getInternalEditor();
         if (editor && editor.debugLocation == bp.lineNo)
             this.scriptView.setDebugLocation(bp.lineNo, true);
@@ -1182,6 +1232,7 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
 
     /**
      * The method handles 'onEditorContextMenu' fired by {@link ScriptView}.
+     * xxxHonza: should be probably removed.
      */
     onEditorContextMenu: function(event, items)
     {
@@ -1192,6 +1243,8 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
 
     getContextMenuItems: function(object, target)
     {
+        var info = this.scriptView.getContextMenuInfo();
+
         var items = [];
 
         // The target must be the textarea used by CodeMirror (thus we're sure that the right-click
@@ -1208,6 +1261,10 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
 
         if (!isCodeTarget)
             return;
+
+        // The target provided by {@link FirebugChrome} is wrong, we need to use the
+        // one from {@link SourceEditor}. See {@link SourceEditor.onInit} for more details.
+        target = info.target;
 
         var lineNo = this.scriptView.getLineIndex(target);
         var text = this.scriptView.getSelectedText();
@@ -1308,6 +1365,25 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
             )
         }
 
+        var sourceFile = this.getSourceFile();
+        var category = sourceFile.getCategory();
+
+        // Pretty printing can be done only for source files that have
+        // corresponding server side script actor. Note that dynamic scripts
+        // are currently collected on the client side (a workaround) since
+        // RDP doesn't support it yet.
+        if (category === "js" && sourceFile.actor)
+        {
+            items.push("-",
+            {
+                label: "script.PrettyPrint",
+                tooltiptext: "script.tip.PrettyPrint",
+                type: "checkbox",
+                checked: sourceFile.isPrettyPrinted,
+                command: Obj.bindFixed(this.togglePrettyPrint, this)
+            });
+        }
+
         return items;
     },
 
@@ -1316,6 +1392,36 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
         var popupMenu = document.getElementById("fbScriptViewPopup");
         if (popupMenu.state === "open")
             popupMenu.hidePopup();
+    },
+
+    getPopupObject: function(target)
+    {
+        var isCodeTarget = (target.tagName === "TEXTAREA" &&
+            Dom.getAncestorByClass(target, "CodeMirror"));
+
+        if (!isCodeTarget)
+            return Firebug.getRepObject(target);
+
+        var info = this.scriptView.getContextMenuInfo();
+        if (!info.rangeParent)
+            return Firebug.getRepObject(target);
+
+        var rangeOffset = info.rangeOffset || 0;
+        var expr = getExpressionAt(info.rangeParent.data, rangeOffset);
+        if (!expr || !expr.expr)
+            return Firebug.getRepObject(target);
+
+        var evalResult;
+        var success = (result, context) => { evalResult = result; }
+        var failure = (result, context) => { }
+
+        CommandLine.evaluate(expr.expr, this.context, null,
+            this.context.getCurrentGlobal(),
+            success, failure, {noStateChange: true});
+
+        // xxxHonza: a promise should be returned since CommandLine.evaluate might
+        // be asynchronous in the future.
+        return evalResult;
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -1361,6 +1467,18 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
             BreakpointStore.enableBreakpoint(currentUrl, line);
         else
             BreakpointStore.disableBreakpoint(currentUrl, line);
+    },
+
+    togglePrettyPrint: function()
+    {
+        Trace.sysout("scriptPanel.togglePrettyPrint;");
+
+        var sourceFile = this.getSourceFile();
+        sourceFile.togglePrettyPrint(() =>
+        {
+            //var lines = DebuggerLib.getExecutableLines(this.context, sourceFile);
+            //Trace.sysout("lines " + lines.join(", "), lines);
+        });
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -1532,9 +1650,6 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
             this.syncCommands(this.context);
             this.syncListeners(this.context);
 
-            // Update Break on Next lightning
-            //Firebug.Breakpoint.updatePanelTab(this, false);
-
             // issue 3463 and 4213
             Firebug.chrome.syncPanel("script");
             Firebug.chrome.focus();
@@ -1596,11 +1711,14 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
         // event and cause {@linke NavigationHistory} to be updated (issue 6950).
         // Also, explicit executing of syncLocationList here is not ideal (are there any
         // other options?)
-        if (!this.location)
+        // Do the update location only if the panel is the selected one at the moment.
+        if (!this.location && this.isSelected())
         {
             this.location = this.getDefaultLocation();
+
             Trace.sysout("scriptPanel.newSource; this.location.getURL() = " +
                 this.location.getURL());
+
             this.updateLocation(this.location);
             Firebug.chrome.syncLocationList();
         }
@@ -1661,18 +1779,6 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
             var tag = rep.shortTag ? rep.shortTag : rep.tag;
 
             tag.replace({object: result}, infoTip);
-
-            // If the menu is never displayed, the contextMenuObject is not reset
-            // (back to null) and is reused at the next time the user opens the
-            // context menu, which is wrong.
-            // This line was appended when fixing:
-            // http://code.google.com/p/fbug/issues/detail?id=1700
-            // The object should be returned by getPopupObject(),
-            // that is called when the context menu is showing.
-            // The problem is, that the "onContextShowing" event doesn't have the
-            // rangeParent field set and so it isn't possible to get the
-            // expression under the cursor (see getExpressionAt).
-            //Firebug.chrome.contextMenuObject = result;
 
             self.infoTipExpr = expr;
         }

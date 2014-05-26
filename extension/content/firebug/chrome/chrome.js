@@ -53,7 +53,8 @@ const firebugURLs =
     issues: "http://code.google.com/p/fbug/issues/list?can=1",
     donate: "https://getfirebug.com/getinvolved",
     extensions: "https://getfirebug.com/wiki/index.php/Firebug_Extensions",
-    issue5110: "http://code.google.com/p/fbug/issues/detail?id=5110"
+    issue5110: "http://code.google.com/p/fbug/issues/detail?id=5110",
+    browserToolbox: "https://developer.mozilla.org/docs/Tools/Browser_Toolbox"
 };
 
 // ********************************************************************************************* //
@@ -177,7 +178,7 @@ var FirebugChrome =
         {
             var cmdPopupBrowser = this.getElementById("fbCommandPopupBrowser");
 
-            this.applyTextSize(Firebug.textSize);
+            this.applyTextSize(Options.get("textSize"));
 
             var doc1 = panelBar1.browser.contentDocument;
             Events.addEventListener(doc1, "mouseover", onPanelMouseOver, false);
@@ -502,7 +503,8 @@ var FirebugChrome =
         if (shouldShow && !this.positionInitialzed)
         {
             this.positionInitialzed = true;
-            if (Firebug.framePosition != "detached" && Firebug.framePosition != "bottom")
+            var framePosition = Options.get("framePosition");
+            if (framePosition !== "detached" && framePosition !== "bottom")
             {
                 // null only updates frame position without side effects
                 this.setPosition();
@@ -769,7 +771,7 @@ var FirebugChrome =
             return;
 
         location = location.href || location.url || location.toString();
-        if (Firebug.filterSystemURLs && Url.isSystemURL(location))
+        if (Options.get("filterSystemURLs") && Url.isSystemURL(location))
             return;
 
         return location;
@@ -825,7 +827,7 @@ var FirebugChrome =
         if (context)
         {
             if (!panelName)
-                panelName = context.panelName? context.panelName : Firebug.defaultPanelName;
+                panelName = context.panelName? context.panelName : Options.get("defaultPanelName");
 
             // Make the HTML panel the default panel, which is displayed
             // to the user the very first time.
@@ -951,6 +953,9 @@ var FirebugChrome =
         }
     },
 
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+    // Status Path
+
     clearStatusPath: function()
     {
         StatusPath.clear();
@@ -960,6 +965,14 @@ var FirebugChrome =
     {
         StatusPath.update();
     },
+
+    // xxxHonza: used by FireDiff 1.2.1
+    getPanelStatusElements: function()
+    {
+        return this.getElementById("fbPanelStatus");
+    },
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
     toggleOrient: function(preferredValue)
     {
@@ -985,7 +998,8 @@ var FirebugChrome =
 
     setPosition: function(pos)
     {
-        if (Firebug.framePosition == pos)
+        var framePosition = Options.get("framePosition");
+        if (framePosition === pos)
             return;
 
         if (pos)
@@ -995,7 +1009,7 @@ var FirebugChrome =
         }
         else
         {
-            pos = Firebug.framePosition;
+            pos = framePosition;
         }
 
         if (pos == "detached")
@@ -1047,7 +1061,7 @@ var FirebugChrome =
         }
 
         Options.set("framePosition", pos);
-        return Firebug.framePosition = pos;
+        return pos;
     },
 
     swapBrowsers: function(oldBrowser, newBrowser)
@@ -1390,17 +1404,15 @@ var FirebugChrome =
         // Make sure the Copy action is only available if there is actually something
         // selected in the panel.
         var sel = target.ownerDocument.defaultView.getSelection();
-        if (!this.contextMenuObject &&
-            !FirebugChrome.$("cmd_copy").getAttribute("disabled") &&
-            !sel.isCollapsed)
+        if (!FirebugChrome.$("cmd_copy").getAttribute("disabled") && !sel.isCollapsed)
         {
             var menuitem = Menu.createMenuItem(popup, {label: "Copy"});
             menuitem.setAttribute("command", "cmd_copy");
         }
 
         var object;
-        if (this.contextMenuObject)
-            object = this.contextMenuObject;
+        if (event.firebugPopupObject)
+            object = event.firebugPopupObject;
         else if (target && target.ownerDocument == document)
             object = Firebug.getRepObject(target);
         else if (target && panel)
@@ -1408,8 +1420,6 @@ var FirebugChrome =
         else if (target)
             // xxxHonza: What about a node from a different document? Is that OK?
             object = Firebug.getRepObject(target);
-
-        this.contextMenuObject = null;
 
         var rep = Firebug.getRep(object, Firebug.currentContext);
         var realObject = rep ? rep.getRealObject(object, Firebug.currentContext) : null;
@@ -1424,7 +1434,6 @@ var FirebugChrome =
                 realRep: realRep,
                 target: target,
                 chromeDoc: target.ownerDocument == document,
-                contextMenuObject: this.contextMenuObject,
                 panel: panel,
             });
         }
@@ -1523,25 +1532,8 @@ var FirebugChrome =
 
         var tooltip = FirebugChrome.$("fbTooltip");
         var target = win.document.tooltipNode;
-
         var panel = target ? Firebug.getElementPanel(target) : null;
-
         var object;
-
-        /* XXXjjb: This causes the Script panel to show the function body over and over.
-         * We need to clear it at least, but actually we need to understand why the tooltip
-         * should show the context menu object at all. One thing the contextMenuObject supports
-         * is peeking at function bodies when stopped at a breakpoint.
-         * That case could be supported with clearing the contextMenuObject, but we don't
-         * know if that breaks something else. So maybe a popupMenuObject should be set
-         * on the context if that is what we want to support.
-         * The other complication is that there seems to be another tooltip.
-        if (this.contextMenuObject)
-        {
-            object = this.contextMenuObject;
-            FBTrace.sysout("tooltip by contextMenuObject");
-        }
-        else*/
 
         if (target && target.ownerDocument == document)
             object = Firebug.getRepObject(target);
@@ -2095,6 +2087,9 @@ function onPanelMouseUp(event)
         Events.cancelEvent(event);
     }
 }
+
+// ********************************************************************************************* //
+// Helpers
 
 function onMainTabBoxMouseDown(event)
 {

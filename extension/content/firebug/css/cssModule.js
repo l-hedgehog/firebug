@@ -19,9 +19,7 @@ function(Firebug, Css, Events, Obj, Options, Xpcom, Module, CSSDirtyListener, Ed
 var Cc = Components.classes;
 var Ci = Components.interfaces;
 
-var reSplitCSS = new RegExp("(url\\((\\\")?.*?\\2\\))|(rgba?\\([^)]*\\)?)|(hsla?\\([^)]*\\)?)|" +
-    "(#[\\dA-Fa-f]+)|(-?\\d+(\\.\\d+)?(%|[a-z]{1,4})?)|\\\"([^\\\"]*)\\\"?|'([^']*)'?|" +
-    "([^,\\s\\/!\\(\\)]+)|(!(.*)?)");
+var reSplitCSS = /(url\((".*?"\)|".*|[^)]*\)?))|(rgba?\([^)]*\)?)|(#[\dA-Fa-f]+)|(hsla?\([^)]*\)?)|(-?\d+(\.\d+)?(%|[a-z]{1,4})?)|"([^"]*)"?|'([^']*)'?|([^,\s\/!\(\)]+)|(!(.*)?)/;
 var reURL = /url\((")?(.*)?\1\)/;
 var reRepeat = /no-repeat|repeat-x|repeat-y|repeat/;
 
@@ -260,14 +258,12 @@ Firebug.CSSModule = Obj.extend(Module, Firebug.EditorSelector,
         while (true)
         {
             m = reSplitCSS.exec(value);
-            if (m && m.index + m[0].length < offset)
-            {
-                value = value.substr(m.index + m[0].length);
-                start += m.index + m[0].length;
-                offset -= m.index + m[0].length;
-            }
-            else
+            if (!m || m.index + m[0].length >= offset)
                 break;
+
+            value = value.substr(m.index + m[0].length);
+            start += m.index + m[0].length;
+            offset -= m.index + m[0].length;
         }
 
         if (!m)
@@ -363,6 +359,15 @@ Firebug.CSSModule = Obj.extend(Module, Firebug.EditorSelector,
             ret.end += skipped;
         }
         return ret;
+    },
+
+    parsePriority: function(value)
+    {
+        var rePriority = /(.*?)\s*(!important)?$/;
+        var m = rePriority.exec(value);
+        var propValue = m ? m[1] : "";
+        var priority = m && m[2] ? "important" : "";
+        return {value: propValue, priority: priority};
     },
 
     parseURLValue: function(value)

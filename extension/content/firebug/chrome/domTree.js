@@ -58,6 +58,7 @@ DomTree.prototype = domplate(
             _domObject: "$member",
             _repObject: "$member",
             $hasChildren: "$member|hasChildren",
+            $repIgnore: true,
             level: "$member.level"},
             TD({"class": "memberLabelCell", style: "padding-left: $member|getIndent\\px"},
                 SPAN({"class": "memberLabel $member.type\\Label"}, "$member|getLabel")
@@ -68,7 +69,7 @@ DomTree.prototype = domplate(
         ),
 
     loop:
-        FOR("member", "$members", 
+        FOR("member", "$members",
             TAG("$member|getRowTag", {member: "$member"})),
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -305,7 +306,7 @@ DomTree.prototype = domplate(
     getType: function(object)
     {
         // xxxHonza: A type provider (or a decorator) should be used here.
-        // (see also a comment in {@WatchTree.getType} 
+        // (see also a comment in {@WatchTree.getType}
         return "dom";
     },
 
@@ -374,7 +375,7 @@ DomTree.prototype = domplate(
         {
             var row = rows[i];
             var member = row.repObject;
-            if (member.value == object)
+            if (member && member.value == object)
                 return row;
         }
 
@@ -400,6 +401,7 @@ DomTree.prototype = domplate(
     resolvePromise: function(promise, object)
     {
         var result;
+        Trace.sysout("domTree.resolvePromise;");
 
         // This flag is used to differentiate sync and async scenario.
         var sync = true;

@@ -7,13 +7,12 @@ define([
     "firebug/lib/trace",
     "firebug/lib/events",
     "firebug/lib/locale",
-    "firebug/lib/dom",
     "firebug/lib/domplate",
     "firebug/chrome/rep",
     "firebug/chrome/reps",
     "firebug/chrome/menu",
 ],
-function(Module, Obj, Firebug, FBTrace, Events, Locale, Dom, Domplate, Rep, FirebugReps, Menu) {
+function(Module, Obj, Firebug, FBTrace, Events, Locale, Domplate, Rep, FirebugReps, Menu) {
 
 "use strict";
 
@@ -382,7 +381,7 @@ var EventLogRep = domplate(FirebugReps.Event,
 
     copyEvent: function(log)
     {
-        return new Dom.EventCopy(log.event);
+        return log.event;
     },
 
     getTarget: function(event)
@@ -433,13 +432,13 @@ Firebug.registerRep(EventLogRep);
 
 Firebug.registerCommand("monitorEvents", {
     handler: monitorEvents.bind(this),
-    helpUrl: "http://getfirebug.com/wiki/index.php/monitorEvents",
+    helpUrl: "https://getfirebug.com/wiki/index.php/monitorEvents",
     description: Locale.$STR("console.cmd.help.monitorEvents")
 });
 
 Firebug.registerCommand("unmonitorEvents", {
     handler: unmonitorEvents.bind(this),
-    helpUrl: "http://getfirebug.com/wiki/index.php/unmonitorEvents",
+    helpUrl: "https://getfirebug.com/wiki/index.php/unmonitorEvents",
     description: Locale.$STR("console.cmd.help.unmonitorEvents")
 });
 

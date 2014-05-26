@@ -9,9 +9,10 @@ define([
     "firebug/lib/css",
     "firebug/lib/wrapper",
     "firebug/lib/array",
+    "firebug/lib/options",
     "firebug/editor/sourceSearch"
 ],
-function(Firebug, FBTrace, Obj, Http, Dom, Css, Wrapper, Arr, SourceSearch) {
+function(Firebug, FBTrace, Obj, Http, Dom, Css, Wrapper, Arr, Options, SourceSearch) {
 
 "use strict";
 
@@ -46,6 +47,7 @@ var HIGHLIGHTED_LINE_CLASS = "CodeMirror-highlightedLine";
 var BP_WRAP_CLASS = "CodeMirror-breakpoint";
 
 var unhighlightDelay = 1300;
+var tabSize = Options.get("replaceTabs");
 
 // ********************************************************************************************* //
 // Source Editor Constructor
@@ -76,8 +78,9 @@ SourceEditor.DefaultConfig =
     value: "",
     mode: "htmlmixed",
     theme: "firebug",
-    indentUnit: 2,
-    tabSize: 4,
+    indentUnit: tabSize || 4,
+    tabSize: tabSize || 4,
+    indentWithTabs: tabSize == 0,
     smartIndent: true,
     extraKeys: {},
     lineWrapping: false,
@@ -202,12 +205,14 @@ SourceEditor.prototype =
         });
 
         // xxxHonza: 'contextmenu' event provides wrong target (clicked) element.
-        // So, handle 'mousedown' first to remember the clicked element and use
-        // it within the getContextMenu item
+        // So, handle 'mousedown' first to remember the clicked element, etc. and
+        // allow to use it through getContextMenuInfo.
         var scroller = this.editorObject.display.scroller;
         scroller.addEventListener("mousedown", function(event)
         {
             self.currentTarget = event.target;
+            self.rangeParent = event.rangeParent;
+            self.rangeOffset = event.rangeOffset;
         });
 
         Trace.sysout("sourceEditor.init; ", this.view);
@@ -547,6 +552,13 @@ SourceEditor.prototype =
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+    clearHistory: function()
+    {
+        this.editorObject.clearHistory();
+    },
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
     // CodeMirror internals
 
     getDocument: function()
@@ -567,6 +579,16 @@ SourceEditor.prototype =
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
     // Commands
+
+    // xxxHonza: see onInit for more details
+    getContextMenuInfo: function()
+    {
+        return {
+            target: this.currentTarget,
+            rangeParent: this.rangeParent,
+            rangeOffset: this.rangeOffset,
+        }
+    },
 
     getContextMenuItems: function()
     {
@@ -1060,13 +1082,6 @@ SourceEditor.prototype =
 
     getLineIndex: function(target)
     {
-        // xxxHonza: the target provided by 'contextmenu' event is wrong and so,
-        // use the one from 'mousedown'
-        if (this.currentTarget)
-            target = this.currentTarget;
-
-        this.currentTarget = null;
-
         var lineElement;
 
         if (Css.hasClass(target, "breakpoint"))
@@ -1094,7 +1109,7 @@ SourceEditor.prototype =
         return lineNo - 1;
     },
 
-    // Method used for the hack of issue 6824 (Randomly get "Unresponsive Script Warning" with 
+    // Method used for the hack of issue 6824 (Randomly get "Unresponsive Script Warning" with
     // commandEditor.html). Adds or removes the .CommandEditor-Hidden class.
     // IMPORTANT: that method should only be used within the Firebug code, and may be removed soon.
     addOrRemoveClassCommandEditorHidden: function(addClass)

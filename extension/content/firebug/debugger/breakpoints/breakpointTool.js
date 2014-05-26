@@ -11,6 +11,8 @@ define([
 ],
 function (Firebug, FBTrace, Obj, Tool, DebuggerLib, BreakpointStore, DebuggerClient) {
 
+"use strict";
+
 // ********************************************************************************************* //
 // Constants
 
@@ -66,9 +68,22 @@ BreakpointTool.prototype = Obj.extend(new Tool(),
 
         this.context.getTool("source").removeListener(this);
 
-        // Thread has been detached, so clean up also all breakpoint clients. They
-        // need to be re-created as soon as the thread actor is attached again.
-        this.context.breakpointClients = [];
+        // Breakpoint clients (instance of native BreakpointClient object) are
+        // preserved across page reloads through Panel's persistent state.
+        // So, we can't just remove them here otherwise breakpoints would be re-created
+        // and duplicated on the server side (at the same location)
+        // (see also {@BreakpointTool.newSource} method) breakpoints with no client object
+        // are set on the backend (see also issue 7290). See also issue 7295 that might be
+        // related.
+        // this.context.breakpointClients = [];
+
+        // Breakpoints need to be disabled on the server side when detach happens
+        // (see also issue 7295).
+        // xxxHonza: this is a workaround for bug:
+        // https://bugzilla.mozilla.org/show_bug.cgi?id=991688
+        var threadActor = DebuggerLib.getThreadActor(this.context.browser);
+        if (threadActor)
+            threadActor.disableAllBreakpoints();
 
         BreakpointStore.removeListener(this);
     },
@@ -96,18 +111,22 @@ BreakpointTool.prototype = Obj.extend(new Tool(),
 
             // Auto-correct shared breakpoint object if necessary and store the original
             // line so, listeners (like e.g. the Script panel) can update the UI.
-            var currentLine = bpClient.location.line - 1;
-            if (bp.lineNo != currentLine)
+            var correctedLine = bpClient.location.line - 1;
+            if (bp.lineNo != correctedLine)
             {
+                Trace.sysout("breakpointTool.onAddBreakpoint; line correction " +
+                    bp.lineNo + " -> " + correctedLine);
+
                 // The breakpoint line is going to be corrected, let's check if there isn't
-                // an existing breakpoint at the new line (see issue: 6253). This must be
-                // done before the correction.
-                var dupBp = BreakpointStore.findBreakpoint(bp.href, bp.lineNo);
+                // an existing breakpoint at the new line. Note: This must be done before
+                // the correction, since the value stored in the bp variable is by reference,
+                // so that would be always found and marked as duplicated to be removed.
+                var dupBp = BreakpointStore.findBreakpoint(bp.href, correctedLine);
 
                 // bpClient deals with 1-based line numbers. Firebug uses 0-based
                 // line numbers (indexes). Let's fix the line.
                 bp.params.originLineNo = bp.lineNo;
-                bp.lineNo = currentLine;
+                bp.lineNo = correctedLine;
 
                 // If an existing breakpoint has been found we need to remove the newly
                 // created one to avoid duplicities (two breakpoints at the same line).
@@ -159,6 +178,41 @@ BreakpointTool.prototype = Obj.extend(new Tool(),
     onModifyBreakpoint: function(bp)
     {
         this.dispatch("onBreakpointModified", [this.context, bp]);
+    },
+
+    onModifyCondition: function(bp)
+    {
+        var client = this.getBreakpointClient(bp.href, bp.lineNo);
+
+        if (!client)
+        {
+            TraceError.sysout("breakpointTool.onModifyCondition; ERROR no client!");
+            return;
+        }
+
+        var condition = bp.condition || "";
+
+        Trace.sysout("breakpointTool.onModifyCondition; set bp condition: " +
+            condition, bp);
+
+        // xxxHonza: BreakpointClient.setCondition() has been introduced in
+        // Firefox 31 [Fx31], and so use internal implementation cloned from
+        // Firefox 32 in that case.
+        var set;
+        if (client.setCondition)
+            set = client.setCondition.bind(client, this.context.activeThread, bp.condition);
+        else
+            set = setCondition.bind(this, this.context, client, bp.condition);
+
+        set().then((newBpClient) =>
+        {
+            Trace.sysout("breakpointTool.onModifyCondition; Done", newBpClient);
+
+            this.removeBreakpointClient(bp.href, bp.lineNo);
+            this.context.breakpointClients.push(newBpClient);
+
+            this.dispatch("onBreakpointModified", [this.context, bp]);
+        });
     },
 
     onRemoveAllBreakpoints: function(bps)
@@ -269,7 +323,17 @@ BreakpointTool.prototype = Obj.extend(new Tool(),
             // due to debugger not being in pause state.
             var threadActor = DebuggerLib.getThreadActor(this.context.browser);
             Trace.sysout("breakpointTool.setBreakpoint; thread actor state: " +
-                threadActor.state);
+                threadActor.state + ", client state: " + thread.state);
+
+            // xxxHonza: I can't set a breakpoint sometimes because ThreadClient
+            // (context.activeThread) says state == paused, while the ThreadActor
+            // is *not* paused. This causes an exception on the server side.
+            if (thread.state == "paused" && threadActor.state != "paused")
+            {
+                // Let's see if anyone can find STR
+                FBTrace.sysout("breakpointTool.setBreakpoint; ERROR Client thread " +
+                    "is out of sync. Let me know how to reproduce this! Honza");
+            }
         }
 
         // Do not create two server side breakpoints at the same line.
@@ -288,9 +352,12 @@ BreakpointTool.prototype = Obj.extend(new Tool(),
 
         function doSetBreakpoint(callback)
         {
+            var bp = BreakpointStore.findBreakpoint(url, lineNumber);
+
             var location = {
                 url: url,
-                line: lineNumber + 1
+                line: lineNumber + 1,
+                condition: bp ? bp.condition : null,
             };
 
             Trace.sysout("breakpointTool.doSetBreakpoint; (" + lineNumber + ")", location);
@@ -538,7 +605,7 @@ BreakpointTool.prototype = Obj.extend(new Tool(),
             // xxxHonza: Don't display the error message. It can happen
             // that dynamic breakpoint (a breakpoint in dynamically created script)
             // is being removed. Such breakpoint doesn't have corresponding
-            // {@link BreakpointClient} for now. 
+            // {@link BreakpointClient} for now.
             //
             //TraceError.sysout("breakpointTool.removeBreakpoint; ERROR removing " +
             //    "non existing breakpoint. " + url + ", " + lineNumber);
@@ -655,6 +722,60 @@ BreakpointTool.prototype = Obj.extend(new Tool(),
         //return JSDebugger.fbs.getBreakpointCondition(url, lineNumber);
     },
 });
+
+// ********************************************************************************************* //
+// Set Condition
+
+/**
+ * Set the condition of this breakpoint.
+ * xxxHonza: cloned from dbg-client.jsm and modifed [Fx32].
+ */
+function setCondition(context, bpClient, condition)
+{
+    var threadClient = context.activeThread;
+    var root = bpClient._client.mainRoot;
+    var deferred = context.defer();
+
+    if (root.traits.conditionalBreakpoints)
+    {
+        var info = {
+            url: bpClient.location.url,
+            line: bpClient.location.line,
+            column: bpClient.location.column,
+            condition: condition
+        };
+
+        // Remove the current breakpoint and add a new one with the condition.
+        bpClient.remove((response) =>
+        {
+            if (response && response.error)
+            {
+                deferred.reject(response);
+                return;
+            }
+
+            threadClient.setBreakpoint(info, (response, newBreakpoint) =>
+            {
+                if (response && response.error)
+                    deferred.reject(response);
+                else
+                    deferred.resolve(newBreakpoint);
+            });
+        });
+    }
+    else
+    {
+        // The property shouldn't even exist if the condition is blank
+        if (condition === "")
+            delete bpClient.conditionalExpression;
+        else
+            bpClient.conditionalExpression = condition;
+
+        deferred.resolve(bpClient);
+    }
+
+    return deferred.promise;
+}
 
 // ********************************************************************************************* //
 // Registration

@@ -421,10 +421,10 @@ Str.escapeJS = function(value)
         .replace(/\n/gm, "\\n").replace('"', '\\"', "g");
 };
 
-Str.cropString = function(text, limit, alterText)
+Str.cropString = function(text, limit, alternativeText)
 {
-    if (!alterText)
-        alterText = "...";
+    if (!alternativeText)
+        alternativeText = "...";
 
     // Make sure it's a string.
     text = String(text);
@@ -437,11 +437,18 @@ Str.cropString = function(text, limit, alterText)
     if (limit <= 0)
         return text;
 
-    var halfLimit = (limit / 2);
-    halfLimit -= 2; // adjustment for alterText's increase in size
+    // Set the limit at least to the length of the alternative text
+    // plus one character of the original text.
+    if (limit <= alternativeText.length)
+        limit = alternativeText.length + 1;
+
+    var halfLimit = (limit - alternativeText.length) / 2;
 
     if (text.length > limit)
-        return text.substr(0, halfLimit) + alterText + text.substr(text.length-halfLimit);
+    {
+        return text.substr(0, Math.ceil(halfLimit)) + alternativeText +
+            text.substr(text.length - Math.floor(halfLimit));
+    }
 
     return text;
 };
@@ -666,33 +673,10 @@ Str.toFixedLocaleString = function(number, decimals)
     if (isNaN(parseFloat(number)))
         throw new Error("Value '" + number + "' of the 'number' parameter is not a number");
 
-    // Check whether 'decimals' is a valid number
-    if (isNaN(parseFloat(decimals)))
-        throw new Error("Value '" + decimals + "' of the 'decimals' parameter is not a number");
-
-    var precision = Math.pow(10, decimals);
-    var formattedNumber = (Math.round(number * precision) / precision).toLocaleString();
-    var decimalMark = (0.1).toLocaleString().match(/\D/);
-    var decimalsCount = (formattedNumber.lastIndexOf(decimalMark) == -1) ?
-        0 : formattedNumber.length - formattedNumber.lastIndexOf(decimalMark) - 1;
-
-    // Append decimals if needed
-    if (decimalsCount < decimals)
-    {
-        // If the number doesn't have any decimals, add the decimal mark
-        if (decimalsCount == 0)
-            formattedNumber += decimalMark;
-
-        // Append additional decimals
-        for (var i=0, count = decimals - decimalsCount; i<count; ++i)
-            formattedNumber += "0";
-    }
-
-    return formattedNumber;
+    return new Intl.NumberFormat(undefined,
+        {minimumFractionDigits: decimals, maximumFractionDigits: decimals}).format(number);
 };
 
-// xxxsz: May be refactored when Firefox implements the ECMAScript Internationalization API
-// See https://bugzil.la/853301
 Str.formatNumber = Deprecated.method("use <number>.toLocaleString() instead",
     function(number) { return number.toLocaleString(); });
 

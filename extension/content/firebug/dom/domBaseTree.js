@@ -86,6 +86,7 @@ DomBaseTree.prototype = domplate(BaseTree,
             _repObject: "$member",
             $hasChildren: "$member|hasChildren",
             $cropped: "$member|getValue|isCropped",
+            $repIgnore: true,
             role: "presentation",
             level: "$member.level"},
             TD({"class": "memberLabelCell", style: "padding-left: $member|getIndent\\px",
@@ -98,7 +99,7 @@ DomBaseTree.prototype = domplate(BaseTree,
                 )
             ),
             TD({"class": "memberValueIcon", $readOnly: "$member.readOnly"},
-                DIV("&nbsp;")
+                DIV()
             ),
             TD({"class": "memberValueCell", $readOnly: "$member.readOnly",
                 role: "presentation"},
@@ -116,11 +117,7 @@ DomBaseTree.prototype = domplate(BaseTree,
 
     hasChildren: function(member)
     {
-        // hasChildren class is set even for cropped strings (there are no real children),
-        // so the tree logic treat them as an expandable tree-items and the user can
-        // 'expand' to see the entire string.
-        var isExpandable = member.hasChildren || this.isCropped(member.value);
-        return isExpandable ? "hasChildren" : "";
+        return this.isExpandable(member) ? "hasChildren" : "";
     },
 
     isCropped: function(value)
@@ -254,7 +251,8 @@ DomBaseTree.prototype = domplate(BaseTree,
                 continue;
 
             // Don't expand if the member doesn't have children any more.
-            if (!repObject.hasChildren)
+            // (note that the member could also be an expanded long string).
+            if (!this.isExpandable(repObject))
                 continue;
 
             var name = this.getRowName(row);
@@ -331,6 +329,26 @@ DomBaseTree.prototype = domplate(BaseTree,
         return rows;
     },
 
+    isExpandable: function(member)
+    {
+        // First, check out |hasChildren| flag, if it's set, this tree-item has children.
+        if (member.hasChildren)
+            return true;
+
+        // hasChildren class is set even for cropped strings (there are no real children),
+        // so the tree logic treats them as an expandable tree-items and the user can
+        // 'expand' to see the entire string.
+        // In order to figure out whether this item displays a cropped string we need
+        // to get its value - either directly using the |member.value| field or through
+        // associated provider (if it's available).
+        var value = member.value;
+        if (member.provider)
+            value = member.provider.getValue(member.value);
+
+        // Check out the value
+        return this.isCropped(value);
+    },
+
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
     /**
@@ -389,8 +407,8 @@ DomBaseTree.prototype = domplate(BaseTree,
 
         // Row member object created by the tree widget.
         var member = row.repObject;
-
-        if (label && Css.hasClass(row, "hasChildren") && !(isString && inValueCell))
+        var hasChildren = Css.hasClass(row, "hasChildren");
+        if (label && hasChildren && !(isString && inValueCell))
         {
             // Basic row toggling is implemented in {@DomTree}
             BaseTree.onClick.apply(this, arguments);
@@ -417,18 +435,15 @@ DomBaseTree.prototype = domplate(BaseTree,
                     return;
                 }
 
-                // Only primitive types can be edited.
+                // Read only values can't be edited.
+                if (member.readOnly)
+                    return;
+
                 // xxxHonza: this place requires the panel to have a provider property.
                 // it also requires the panel to have setPropertyValue and editProperty,
                 // which is all implemented by {@DomBasePanel}.
                 // Shouldn't the logic be rather part of the DomBasePanel?
                 var value = panel.provider.getValue(member.value);
-                if (typeof(value) == "object")
-                    return;
-
-                // Read only values can't be edited.
-                if (member.readOnly)
-                    return;
 
                 if (typeof(value) == "boolean")
                     panel.setPropertyValue(row, "" + !value);

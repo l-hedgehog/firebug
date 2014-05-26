@@ -16,11 +16,9 @@
 <ol>
 <li>Open Firebug and enable the Console and the Script panels</li>
 <li>Switch to the Console panel and click <code style="color:green">Break On All Errors</code>.</li>
-<li>Press the <code>Execute Test</code> button</li>
+<li>Press this button <button id="testButton" onclick="onExecuteTest()">Execute Test</button></li>
 <li>Firebug should switch to the Script panel and halt in the debugger.</li>
 </ol>
-
-<button id="testButton" onclick="onExecuteTest()">Execute Test</button>
 
 <script type="text/javascript">
 function onExecuteTest()

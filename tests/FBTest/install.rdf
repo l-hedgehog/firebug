@@ -14,7 +14,7 @@
       <Description>
         <em:id>toolkit@mozilla.org</em:id>
         <em:minVersion>22.0</em:minVersion>
-        <em:maxVersion>30.*</em:maxVersion>
+        <em:maxVersion>40.*</em:maxVersion>
       </Description>
     </em:targetApplication>
 
@@ -22,12 +22,12 @@
       <Description>
         <em:id>{ec8030f7-c20a-464f-9b0e-13a3a9e97384}</em:id> <!-- firefox -->
         <em:minVersion>22.0</em:minVersion>
-        <em:maxVersion>30.*</em:maxVersion>
+        <em:maxVersion>40.*</em:maxVersion>
       </Description>
     </em:targetApplication>
 
-    <em:updateURL>https://getfirebug.com/releases/fbtest/1.13/update.rdf</em:updateURL>
-    <em:homepageURL>http://getfirebug.com/wiki/index.php/Firebug_Tests</em:homepageURL>
+    <em:updateURL>https://getfirebug.com/releases/fbtest/2.0/update.rdf</em:updateURL>
+    <em:homepageURL>https://getfirebug.com/wiki/index.php/Firebug_Tests</em:homepageURL>
 
   </Description>
 </RDF>

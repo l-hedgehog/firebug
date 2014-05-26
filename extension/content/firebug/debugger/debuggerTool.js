@@ -85,7 +85,7 @@ DebuggerTool.prototype = Obj.extend(new Tool(),
             if (currContext && currContext != this.context)
             {
                 var panel = currContext.getPanel("script");
-                if (panel && panel === Firebug.chrome.getSelectedPanel())
+                if (panel && panel.isSelected())
                 {
                     var state = Firebug.getPanelState(panel);
                     panel.show(state);
@@ -201,7 +201,6 @@ DebuggerTool.prototype = Obj.extend(new Tool(),
         this.context.stoppedFrame = frame;
         this.context.currentFrame = frame;
         this.context.currentPacket = packet;
-        this.context.stopped = true;
         this.context.currentPauseActor = packet.actor;
 
         // Notify listeners, about debugger pause event.
@@ -222,6 +221,17 @@ DebuggerTool.prototype = Obj.extend(new Tool(),
             Trace.sysout("debuggerTool.paused; Listeners don't want to break the debugger.");
             return doResume(this);
         }
+
+        // Mark the context stopped as soon as we know that we don't want to resume
+        // immediately. See above code where listeners can cause that.
+        // This can save a lot of updates done within this.resumed() since the debugger
+        // didn't really stopped.
+        // Also, this solves recursion problem (see issue 7308), that happens when
+        // evaluation of expression in the {@link WatchPanel} cause exception and the
+        // debugger is set to break on it. The debugger will automatically resumed
+        // and so, the WatchPanel won't try to evaluate again causing the debugger
+        // break again and causing infinite asynchronous loop.
+        this.context.stopped = true;
 
         // Asynchronously initializes ThreadClient's stack frame cache. If you want to
         // sync with the cache handle 'framesadded' and 'framescleared' events.
@@ -256,6 +266,11 @@ DebuggerTool.prototype = Obj.extend(new Tool(),
 
         Firebug.dispatchEvent(this.context.browser, "onResumed");
 
+        this.context.stoppedFrame = null;
+        this.context.currentFrame = null;
+        this.context.currentTrace = null;
+        this.context.currentPacket = null;
+
         // When Firebug is attached to the {@link ThreadClient} object the debugger is paused.
         // As soon as all initialization steps are done {@link TabClient} resumes the
         // debugger. In such case the {@link TabContext} object isn't stopped and there is no
@@ -267,10 +282,6 @@ DebuggerTool.prototype = Obj.extend(new Tool(),
             this.context.clientCache.clear();
 
         this.context.stopped = false;
-        this.context.stoppedFrame = null;
-        this.context.currentFrame = null;
-        this.context.currentTrace = null;
-        this.context.currentPacket = null;
 
         this.dispatch("onStopDebugging", [this.context]);
     },
@@ -348,6 +359,7 @@ DebuggerTool.prototype = Obj.extend(new Tool(),
         {
             if (callback)
                 callback();
+            this.dispatch("onResumeDebugger", [this.context, limit, response]);
         });
     },
 
@@ -452,7 +464,7 @@ DebuggerTool.prototype = Obj.extend(new Tool(),
     },
 
     // xxxHonza: used to get boolean result of evaluated breakpoint condition
-    // should be somewhere is an API library so, we can share it. 
+    // should be somewhere is an API library so, we can share it.
     isFalse: function(descriptor)
     {
         if (!descriptor || typeof(descriptor) != "object")
@@ -494,10 +506,6 @@ DebuggerTool.prototype = Obj.extend(new Tool(),
         });
     },
 });
-
-// ********************************************************************************************* //
-// Helpers
-
 
 // ********************************************************************************************* //
 // Registration

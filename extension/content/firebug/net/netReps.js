@@ -410,7 +410,7 @@ Firebug.NetMonitor.NetRequestEntry = domplate(Rep, new EventSource(),
 {
     fileTag:
         FOR("file", "$files",
-            TR({"class": "netRow $file.file|getCategory focusRow outerFocusRow",
+            TR({"class": "netRow $file.file|getCategories focusRow outerFocusRow",
                 onclick: "$onClick", "role": "row", "aria-expanded": "false",
                 $hasHeaders: "$file.file|hasRequestHeaders",
                 $history: "$file.file.history",
@@ -474,7 +474,7 @@ Firebug.NetMonitor.NetRequestEntry = domplate(Rep, new EventSource(),
         ),
 
     netInfoTag:
-        TR({"class": "netInfoRow $file|getCategory outerFocusRow", "role" : "row"},
+        TR({"class": "netInfoRow $file|getCategories outerFocusRow", "role" : "row"},
             TD({"class": "sourceLine netRowHeader"}),
             TD({"class": "netInfoCol", colspan: 8, "role" : "gridcell"})
         ),
@@ -583,10 +583,6 @@ Firebug.NetMonitor.NetRequestEntry = domplate(Rep, new EventSource(),
             if (!netInfoBox.selectedTab)
                 Firebug.NetMonitor.NetInfoBody.selectTabByName(netInfoBox, "Headers");
 
-            var category = NetUtils.getFileCategory(row.repObject);
-            if (category)
-                Css.setClass(netInfoBox, "category-" + category);
-
             row.setAttribute("aria-expanded", "true");
         }
         else
@@ -602,11 +598,11 @@ Firebug.NetMonitor.NetRequestEntry = domplate(Rep, new EventSource(),
         }
     },
 
-    getCategory: function(file)
+    getCategories: function(file)
     {
-        var category = NetUtils.getFileCategory(file);
-        if (category)
-            return "category-" + category;
+        var categories = NetUtils.getFileCategories(file);
+        if (categories.length !== 0)
+            return categories.map((category) => "category-" + category).join(" ");
 
         return "category-undefined";
     },
@@ -912,7 +908,7 @@ Firebug.NetMonitor.NetInfoBody = domplate(Rep, new EventSource(),
     getParamName: function(param)
     {
         var name = param.name;
-        var limit = Firebug.netParamNameLimit;
+        var limit = Options.get("netParamNameLimit");
         if (limit <= 0)
             return name;
 
@@ -952,7 +948,8 @@ Firebug.NetMonitor.NetInfoBody = domplate(Rep, new EventSource(),
                 return headers[i].value == 0;
         }
 
-        return file.category in NetUtils.binaryFileCategories || file.responseText == "";
+        return (file.categories && file.categories.some((category) => category in NetUtils.binaryFileCategories)) ||
+            file.responseText == "";
     },
 
     hideHtml: function(file)
@@ -1147,7 +1144,7 @@ Firebug.NetMonitor.NetInfoBody = domplate(Rep, new EventSource(),
                 FBTrace.sysout("netInfoResponseTab", {netInfoBox: netInfoBox, file: file});
             if (!netInfoBox.responsePresented)
             {
-                if (file.category == "image")
+                if (file.categories && file.categories.indexOf("image") !== -1)
                 {
                     netInfoBox.responsePresented = true;
 
@@ -1157,7 +1154,7 @@ Firebug.NetMonitor.NetInfoBody = domplate(Rep, new EventSource(),
                     Dom.clearNode(responseTextBox);
                     responseTextBox.appendChild(responseImage, responseTextBox);
                 }
-                else if (!(NetUtils.binaryCategoryMap.hasOwnProperty(file.category)))
+                else if (!file.categories || !file.categories.some((category) => category in NetUtils.binaryCategoryMap))
                 {
                     this.setResponseText(file, netInfoBox, responseTextBox, context);
                 }
@@ -1234,7 +1231,7 @@ Firebug.NetMonitor.NetInfoBody = domplate(Rep, new EventSource(),
     {
         // Get response text and make sure it doesn't exceed the max limit.
         var text = NetUtils.getResponseText(file, context);
-        var limit = Firebug.netDisplayedResponseLimit + 15;
+        var limit = Options.get("netDisplayedResponseLimit") + 15;
         var limitReached = text ? (text.length > limit) : false;
         if (limitReached)
             text = text.substr(0, limit) + "...";
@@ -1595,7 +1592,7 @@ Firebug.NetMonitor.NetInfoPostData = domplate(Rep, new EventSource(),
 
         return postData;
     },
-    
+
     onChangeSort: function(event)
     {
         var target = event.target;
@@ -1639,7 +1636,7 @@ Firebug.NetMonitor.NetInfoHeaders = domplate(Rep, new EventSource(),
             ),
             DIV({"class": "netHeadersGroup collapsed", "data-pref": "netRequestHeadersVisible"},
                 DIV({"class": "netInfoHeadersGroup netInfoRequestHeadersTitle"},
-                    SPAN({"class": "netHeader twisty", 
+                    SPAN({"class": "netHeader twisty",
                         onclick: "$toggleHeaderContent"},
                         Locale.$STR("RequestHeaders")),
                     SPAN({"class": "netHeadersViewSource request collapsed", onclick: "$onViewSource",
@@ -1654,7 +1651,7 @@ Firebug.NetMonitor.NetInfoHeaders = domplate(Rep, new EventSource(),
             ),
             DIV({"class": "netHeadersGroup collapsed", "data-pref": "netCachedHeadersVisible"},
                 DIV({"class": "netInfoHeadersGroup netInfoCachedResponseHeadersTitle"},
-                    SPAN({"class": "netHeader twisty", 
+                    SPAN({"class": "netHeader twisty",
                         onclick: "$toggleHeaderContent"},
                         Locale.$STR("CachedResponseHeaders"))
                 ),
@@ -1665,7 +1662,7 @@ Firebug.NetMonitor.NetInfoHeaders = domplate(Rep, new EventSource(),
             ),
             DIV({"class": "netHeadersGroup collapsed", "data-pref": "netPostRequestHeadersVisible"},
                 DIV({"class": "netInfoHeadersGroup netInfoPostRequestHeadersTitle"},
-                    SPAN({"class": "netHeader twisty", 
+                    SPAN({"class": "netHeader twisty",
                         onclick: "$toggleHeaderContent"},
                     Locale.$STR("PostRequestHeaders"))
                 ),
@@ -1687,9 +1684,9 @@ Firebug.NetMonitor.NetInfoHeaders = domplate(Rep, new EventSource(),
     {
         var target = event.target;
         var headerGroup = Dom.getAncestorByClass(target, "netHeadersGroup");
-        
+
         Css.toggleClass(headerGroup, "opened");
-        if (Css.hasClass(headerGroup, "opened")) 
+        if (Css.hasClass(headerGroup, "opened"))
         {
             headerGroup.setAttribute("aria-expanded", "true");
             Options.set(headerGroup.dataset.pref, true);

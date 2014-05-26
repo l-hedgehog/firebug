@@ -87,6 +87,7 @@ Firebug.DOMBasePanel.prototype = Obj.extend(Panel,
     initialize: function()
     {
         this.toggles = new ToggleBranch.ToggleBranch();
+        this.scrollTop = 0;
 
         Panel.initialize.apply(this, arguments);
     },
@@ -113,7 +114,11 @@ Firebug.DOMBasePanel.prototype = Obj.extend(Panel,
 
     refresh: function()
     {
-        this.rebuild(true);
+        var scrollTop = this.panelNode.scrollTop;
+        var toggles = new ToggleBranch.ToggleBranch();
+        this.tree.saveState(toggles);
+
+        this.rebuild(false, scrollTop, toggles);
     },
 
     updateSelection: function(object)
@@ -150,15 +155,12 @@ Firebug.DOMBasePanel.prototype = Obj.extend(Panel,
 
     getShowClosuresMenuItem: function()
     {
-        var requireScriptPanel = DebuggerLib._closureInspectionRequiresDebugger();
         var label = Locale.$STR("ShowClosures");
         var tooltip = Locale.$STR("dom.option.tip.Show_Closures2");
-        if (requireScriptPanel)
-            tooltip = Locale.$STRF("script.Script_panel_must_be_enabled", [tooltip]);
+        tooltip = Locale.$STRF("script.Script_panel_must_be_enabled", [tooltip]);
         var menuItem = Menu.optionMenu(label, "showClosures", tooltip);
         menuItem.nol10n = true;
-        if (requireScriptPanel && !PanelActivation.isPanelEnabled(Firebug.getPanelType("script")))
-            menuItem.disabled = true;
+        menuItem.disabled = !PanelActivation.isPanelEnabled("script");
         return menuItem;
     },
 
@@ -207,8 +209,6 @@ Firebug.DOMBasePanel.prototype = Obj.extend(Panel,
             var rowObject = member.object;
             var rowValue = member.value;
 
-            // xxxHonza: the watch panel should be responsible for the customization
-            var isWatch = Css.hasClass(row, "watchRow");
             var isStackFrame = rowObject instanceof StackFrame;
             var label, tooltiptext;
 
@@ -238,12 +238,7 @@ Firebug.DOMBasePanel.prototype = Obj.extend(Panel,
                 );
             }
 
-            if (isWatch)
-            {
-                label = "EditWatch";
-                tooltiptext = "watch.tip.Edit_Watch";
-            }
-            else if (isStackFrame)
+            if (isStackFrame)
             {
                 label = "EditVariable";
                 tooltiptext = "stack.tip.Edit_Variable";
@@ -254,35 +249,33 @@ Firebug.DOMBasePanel.prototype = Obj.extend(Panel,
                 tooltiptext = "dom.tip.Edit_Property";
             }
 
-            var readOnly = (!isWatch && !isStackFrame && member.readOnly);
+            var readOnly = (!isStackFrame && !!member.readOnly);
             if (!readOnly)
             {
                 items.push(
                     "-",
                     {
                         label: label,
+                        id: "EditDOMProperty",
                         tooltiptext: tooltiptext,
                         command: Obj.bindFixed(this.editProperty, this, row)
                     }
                 );
             }
 
-            var isDomMemeber = Dom.isDOMMember(rowObject, rowName);
-
-            if (isWatch || (member.deletable && !isStackFrame && !isDomMemeber))
+            if (member.deletable && !isStackFrame)
             {
                 items.push(
                     {
-                        label: isWatch ? "DeleteWatch" : "DeleteProperty",
+                        label: "DeleteProperty",
                         id: "DeleteProperty",
-                        tooltiptext: isWatch ? "watch.tip.Delete_Watch" :
-                            "dom.tip.Delete_Property",
+                        tooltiptext: "dom.tip.Delete_Property",
                         command: Obj.bindFixed(this.deleteProperty, this, row)
                     }
                 );
             }
 
-            if (!isDomMemeber && member && member.breakable)
+            if (member.breakable && !Dom.isDOMMember(rowObject, rowName))
             {
                 var bps = this.context.dom.breakpoints;
                 var hasBreakpoint = bps.findBreakpoint(rowObject, rowName);
@@ -332,6 +325,7 @@ Firebug.DOMBasePanel.prototype = Obj.extend(Panel,
         return Wrapper.unwrapObject(object);
     },
 
+    // xxxHonza: |update| argument is obsolete?
     rebuild: function(update, scrollTop, toggles)
     {
         Trace.sysout("domBasePanel.rebuild; scrollTop: " + scrollTop);
@@ -479,69 +473,56 @@ Firebug.DOMBasePanel.prototype = Obj.extend(Panel,
         if (member && member.readOnly)
             return;
 
-        if (Css.hasClass(row, "watchNewRow"))
+        var object = this.getRowObject(row);
+        this.context.thisValue = object;
+
+        if (!editValue)
         {
-            Editor.startEditing(row, "");
+            var propValue = this.getRowPropertyValue(row);
+
+            var type = typeof propValue;
+            if (type === "undefined" || type === "number" || type === "boolean")
+                editValue = String(propValue);
+            else if (type === "string")
+                editValue = "\"" + Str.escapeJS(propValue) + "\"";
+            else if (propValue === null)
+                editValue = "null";
+            else if (object instanceof window.Window || object instanceof StackFrame)
+                editValue = getRowName(row);
+            else
+                editValue = "this." + getRowName(row); // XXX "this." doesn't actually work
         }
-        else if (Css.hasClass(row, "watchRow"))
-        {
-            Editor.startEditing(row, getRowName(row));
-        }
-        else
-        {
-            var object = this.getRowObject(row);
-            this.context.thisValue = object;
 
-            if (!editValue)
-            {
-                var propValue = this.getRowPropertyValue(row);
+        var selectionData = null;
+        if (type === "string")
+            selectionData = {start: 1, end: editValue.length-1};
 
-                var type = typeof propValue;
-                if (type === "undefined" || type === "number" || type === "boolean")
-                    editValue = String(propValue);
-                else if (type === "string")
-                    editValue = "\"" + Str.escapeJS(propValue) + "\"";
-                else if (propValue === null)
-                    editValue = "null";
-                else if (object instanceof window.Window || object instanceof StackFrame)
-                    editValue = getRowName(row);
-                else
-                    editValue = "this." + getRowName(row); // XXX "this." doesn't actually work
-            }
-
-            var selectionData = null;
-            if (type === "string")
-                selectionData = {start: 1, end: editValue.length-1};
-
-            Editor.startEditing(row, editValue, null, selectionData);
-        }
+        Editor.startEditing(row, editValue, null, selectionData);
     },
 
     deleteProperty: function(row)
     {
-        if (Css.hasClass(row, "watchRow"))
-        {
-            this.deleteWatch(row);
-        }
-        else
-        {
-            var member = row.domObject;
-            var object = member.object;
+        var member = row.domObject;
+        var object = member.object;
+        var name = member.name;
 
-            if (member.deletable)
+        if (member.deletable)
+        {
+            try
             {
-                try
-                {
-                    delete object[member.name];
-                }
-                catch (exc)
-                {
-                    return;
-                }
+                while (object && !Obj.contentObjectHasOwnProperty(object, name))
+                    object = Object.getPrototypeOf(object);
 
-                this.rebuild(true);
-                this.markChange();
+                if (object)
+                    delete object[name];
             }
+            catch (exc)
+            {
+                return;
+            }
+
+            this.rebuild(true);
+            this.markChange();
         }
     },
 
@@ -574,7 +555,7 @@ Firebug.DOMBasePanel.prototype = Obj.extend(Panel,
 
         function failure(exc, context)
         {
-            Trace.sysout("domBasePanel.setPropertyValue; evaluate FAILED " + exc, exc);
+            Trace.sysout("domBasePanel.setPropertyValue; evaluation FAILED " + exc, exc);
 
             try
             {
@@ -588,10 +569,10 @@ Firebug.DOMBasePanel.prototype = Obj.extend(Panel,
             }
         }
 
-        if (object && !(object instanceof StackFrame) && !(typeof(object) === "function"))
+        if (object && !(object instanceof StackFrame) && typeof(object) !== "function")
         {
-            CommandLine.evaluate(value, this.context, object, this.context.getCurrentGlobal(),
-                success, failure, {noStateChange: true});
+            CommandLine.evaluate(value, this.context, object, null, success, failure,
+                {noStateChange: true});
         }
         else if (this.context.stopped)
         {
@@ -638,7 +619,7 @@ Firebug.DOMBasePanel.prototype = Obj.extend(Panel,
         if (name === "this")
             return;
 
-        // Toggle breakpoint on the clicked row. {@DOMModule} will peform the action
+        // Toggle breakpoint on the clicked row. {@DOMModule} will perform the action
         // and also fire corresponding event that should be handled by specific
         // panels to update the UI.
         var object = this.getRowObject(row);
@@ -660,7 +641,11 @@ Firebug.DOMBasePanel.prototype = Obj.extend(Panel,
 
     populateReadOnlyInfoTip: function(infoTip, target)
     {
-        var member = Firebug.getRepObject(target);
+        // We can't use Firebug.getRepObject to find the |member| object since
+        // tree rows are using repIgnore flag (to properly populate context menus).
+        // (see also issue 7337)
+        var row = Dom.getAncestorByClass(target, "memberRow");
+        var member = row.repObject;
         if (!member.descriptor)
         {
             // xxxHonza: this happens quite often why?

@@ -158,7 +158,7 @@ SourceTool.prototype = Obj.extend(new Tool(),
         // Create a source file and append it into the context. This is the only
         // place where an instance of {@link SourceFile} is created.
         var sourceFile = new SourceFile(this.context, script.actor, script.url,
-            script.isBlackBoxed);
+            script.isBlackBoxed, script.isPrettyPrinted);
 
         this.context.addSourceFile(sourceFile);
 
@@ -229,6 +229,8 @@ SourceTool.prototype = Obj.extend(new Tool(),
                     // Clear first to avoid duplicities.
                     script.clearBreakpoint(bp.params.dynamicHandler);
                     script.setBreakpoint(offsets[0], bp.params.dynamicHandler);
+
+                    Trace.sysout("sourceTool.onAddBreakpoint; set dynamic handler;", script);
                 }
             }
         }
@@ -285,7 +287,7 @@ function DynamicSourceCollector(sourceTool)
 
 /**
  * xxxHonza: workaround for missing RDP 'newSource' packets.
- * 
+ *
  * This object uses backend Debugger instance |threadActor.dbg| to hook script creation
  * (onNewScript callback). This way we can collect even all dynamically created scripts
  * (which are currently not send over RDP) and populate the current {@link TabContext}
@@ -333,10 +335,22 @@ DynamicSourceCollector.prototype =
         if (introType == "scriptElement")
         {
             // xxxHonza: another workaround, a script element is appended
-            // dynamically if the parent document state is already set to 'complete'.
+            // dynamically if the parent document state is set to 'complete' or 'interactive'.
+            //
+            // <script> elements with external scripts (src attribute set) are
+            // not considered as dynamic scripts here (we'll get 'newScript' event
+            // from the backend for those).
+            //
+            // xxxHonza: if an iframe with an external script is reloaded (and so, new script
+            // created) we don't get the event from the backend, even if it's standard <script>.
             var element = script.source.element.unsafeDereference();
             var state = element.ownerDocument.readyState;
-            if (state != "complete")
+            var srcAttr = element.getAttribute("src");
+
+            Trace.sysout("sourceTool.onNewScript; scriptElement added, doc-state: " +
+                state + ", src-attr: " + srcAttr, script);
+
+            if ((state != "complete" && state != "interactive") || srcAttr)
             {
                 Trace.sysout("sourceTool.onNewScript; Could be dynamic script, " +
                     "but we can't be sure. See bug 983297 " + script.url + ", " +
@@ -380,14 +394,9 @@ DynamicSourceCollector.prototype =
         // in case of bigger dynamic web applications.
         if (Trace.active)
         {
-            var element = script.source.element;
-            if (element)
-                element = element.unsafeDereference();
-
             var introType = script.source.introductionType;
-
             Trace.sysout("sourceTool.addDynamicScript; " + script.source.url + ", " +
-                introType, script);
+                introType + ", " + script.source.elementAttributeName, script);
         }
 
         // Get an existing instance of {@link SourceFile} by URL. We don't want to create
@@ -397,7 +406,7 @@ DynamicSourceCollector.prototype =
         if (!sourceFile)
         {
             // xxxHonza: there should be only one place where instance of SourceFile is created.
-            var sourceFile = new SourceFile(this.context, null, url, false);
+            var sourceFile = new SourceFile(this.context, null, url, false, false);
 
             // xxxHonza: duplicated from {@link SourceFile}
             var source = script.source.text.replace(/\r\n/gm, "\n");
@@ -419,6 +428,11 @@ DynamicSourceCollector.prototype =
         // out during standard breakpoint initialization within:
         // {@link BreakpointTool.newSource}.
         this.registerScript(sourceFile, script);
+
+        // Restore breakpoints in dynamic scripts (including child scripts).
+        this.restoreBreakpoints(script);
+        for (var s of script.getChildScripts())
+            this.restoreBreakpoints(s);
 
         // New source file created, so let the rest of the system to deal with it just
         // like with any other (non dynamic) source file.
@@ -444,6 +458,22 @@ DynamicSourceCollector.prototype =
         var bps = BreakpointStore.getBreakpoints(sourceFile.href);
         for (var bp of bps)
             this.sourceTool.onAddBreakpoint(bp);
+    },
+
+    restoreBreakpoints: function(script)
+    {
+        var threadActor = DebuggerLib.getThreadActor(this.context.browser);
+        if (!threadActor._allowSource(script.url))
+            return false;
+
+        var endLine = script.startLine + script.lineCount - 1;
+        for (var bp of threadActor.breakpointStore.findBreakpoints({url: script.url}))
+        {
+            if (bp.line >= script.startLine && bp.line <= endLine)
+                threadActor._setBreakpoint(bp);
+        }
+
+        return true;
     }
 };
 
@@ -462,6 +492,8 @@ BreakpointHitHandler.prototype =
 {
     hit: function(frame)
     {
+        Trace.sysout("sourceTool.hit; Dynamic breakpoint hit!", frame);
+
         if (this.bp && this.bp.condition)
         {
             // Copied from firebug/debugger/actors/breakpointActor
@@ -495,7 +527,7 @@ BreakpointHitHandler.prototype =
 }
 
 // ********************************************************************************************* //
-// StackFrame builder Decorator
+// StackFrame Patch
 
 var originalBuildStackFrame = StackFrame.buildStackFrame;
 
@@ -566,7 +598,7 @@ function buildStackFrame(frame, context)
 StackFrame.buildStackFrame = buildStackFrame;
 
 // ********************************************************************************************* //
-// ErrorStackTraceObserver
+// ErrorStackTraceObserver Patch
 
 /**
  * Monkey path the {@link ErrorStackTraceObserver} that is responsible for collecting
@@ -582,6 +614,24 @@ ErrorStackTraceObserver.getSourceFile = function(context, script)
 
     return originalGetSourceFile.apply(ErrorStackTraceObserver, arguments);
 }
+
+// ********************************************************************************************* //
+// SourceFile Patch
+
+var originalSourceLinkForScript = SourceFile.getSourceLinkForScript;
+SourceFile.getSourceLinkForScript = function(script, context)
+{
+    var introType = script.source.introductionType;
+    var scriptType = dynamicTypesMap[introType];
+    if (scriptType)
+    {
+        var sourceFile = getSourceFileByScript(context, script);
+        if (sourceFile)
+            return sourceFile.getSourceLink();
+    }
+
+    return originalSourceLinkForScript.apply(SourceFile, arguments);
+};
 
 // ********************************************************************************************* //
 // Script Helpers

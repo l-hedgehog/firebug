@@ -53,7 +53,7 @@ catch (err)
 // ********************************************************************************************* //
 
 // Backward compatibility (some modules changed location)
-// http://getfirebug.com/wiki/index.php/Extension_Migration
+// https://getfirebug.com/wiki/index.php/Extension_Migration
 // http://code.google.com/p/fbug/issues/detail?id=5199
 var paths = {};
 paths["firebug/css/cssComputedElementPanel"] = "firebug/css/computedPanel";
@@ -152,7 +152,7 @@ function onModulesLoaded(ChromeFactory, FBL, Firebug, Browser)
     // extensions.
     Firebug.connection = new Browser();  // prepare for addListener calls
 
-    // xxxHonza: BTI refactoring suggestions: 
+    // xxxHonza: BTI refactoring suggestions:
     // 1) The connection is an object that ensures sending and receiving packets
     // 2) The current Firebug.connection should be renamed to Firebug.proxy
     // 3) The BTI Browser should be renamed to BrowserProxy

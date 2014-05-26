@@ -40,7 +40,7 @@ var {domplate, A, SPAN, FOR, TAG, DIV} = Domplate;
 
 /**
  * @module The module implements the following commands:
- * 
+ *
  * 'debug' Adds a breakpoint on the first line of a function.
  * 'undebug' Removes the breakpoint on the first line of a function.
  * 'monitor' Turns on logging for all calls to a function.
@@ -159,13 +159,13 @@ var FunctionMonitor = Obj.extend(Module,
         return (mode === "monitor" ? BreakpointStore.BP_MONITOR : BreakpointStore.BP_NORMAL);
     },
 
-    isScriptMonitored: function(context, script)
+    isScriptMonitored: function(context, script, mode)
     {
         var location = {line: script.startLine, url: script.url};
         location = DebuggerLib.getNextExecutableLine(context, location);
         if (!location)
             return false;
-        var type = BreakpointStore.BP_MONITOR;
+        var type = this.getBreakpointType(mode);
         return BreakpointStore.findBreakpoint(location.url, location.line - 1, type) != null;
     },
 
@@ -334,8 +334,10 @@ function makeMonitorCall(context, fn, mode, add, successKey, failureKey)
     // cannot happen).
     if (!failureKey)
         success = true;
+
     var msg = Locale.$STR(success ? successKey : failureKey);
     var logType = (success || !add ? "info" : "error");
+
     Console.logFormatted([msg], context, logType);
 }
 
@@ -370,25 +372,25 @@ function unmonitor(context, args)
 
 Firebug.registerCommand("debug", {
     handler: debug.bind(this),
-    helpUrl: "http://getfirebug.com/wiki/index.php/debug",
+    helpUrl: "https://getfirebug.com/wiki/index.php/debug",
     description: Locale.$STR("console.cmd.help.debug")
 });
 
 Firebug.registerCommand("undebug", {
     handler: undebug.bind(this),
-    helpUrl: "http://getfirebug.com/wiki/index.php/undebug",
+    helpUrl: "https://getfirebug.com/wiki/index.php/undebug",
     description: Locale.$STR("console.cmd.help.undebug")
 });
 
 Firebug.registerCommand("monitor", {
     handler: monitor.bind(this),
-    helpUrl: "http://getfirebug.com/wiki/index.php/monitor",
+    helpUrl: "https://getfirebug.com/wiki/index.php/monitor",
     description: Locale.$STR("console.cmd.help.monitor")
 });
 
 Firebug.registerCommand("unmonitor", {
     handler: unmonitor.bind(this),
-    helpUrl: "http://getfirebug.com/wiki/index.php/unmonitor",
+    helpUrl: "https://getfirebug.com/wiki/index.php/unmonitor",
     description: Locale.$STR("console.cmd.help.unmonitor")
 });
 

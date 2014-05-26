@@ -40,6 +40,7 @@ function HTMLEditor(doc)
     var config = {
         mode: "htmlmixed",
         readOnly: false,
+        lineWrapping: true,
         gutters: []
     };
 
@@ -120,6 +121,10 @@ HTMLEditor.prototype = domplate(BaseEditor,
 
         var command = Firebug.chrome.$("cmd_firebug_toggleHTMLEditing");
         command.setAttribute("checked", true);
+
+        // Clear undo history in the editor (Ctrl+Z should do nothing at the
+        // beginning, see also issue 7382);
+        this.editor.clearHistory();
     },
 
     hide: function()

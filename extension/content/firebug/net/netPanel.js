@@ -244,7 +244,7 @@ NetPanel.prototype = Obj.extend(ActivablePanel,
     {
         if (this.table)
         {
-            if (Firebug.netShowBFCacheResponses)
+            if (Options.get("netShowBFCacheResponses"))
                 Css.setClass(this.table, "showBFCacheResponses");
             else
                 Css.removeClass(this.table, "showBFCacheResponses");
@@ -387,7 +387,7 @@ NetPanel.prototype = Obj.extend(ActivablePanel,
             }
         );
 
-        if (NetUtils.textFileCategories.hasOwnProperty(file.category))
+        if (file.categories.some((category) => category in NetUtils.textFileCategories))
         {
             items.push(
                 {
@@ -416,7 +416,7 @@ NetPanel.prototype = Obj.extend(ActivablePanel,
             }
         );
 
-        if (NetUtils.textFileCategories.hasOwnProperty(file.category))
+        if (file.categories.some((category) => category in NetUtils.textFileCategories))
         {
             items.push(
                 {
@@ -1006,11 +1006,12 @@ NetPanel.prototype = Obj.extend(ActivablePanel,
 
             if (file.mimeType)
             {
-                // Force update category.
-                file.category = null;
+                // Force update categories
+                file.categories = null;
                 for (var category in NetUtils.fileCategories)
-                    Css.removeClass(row, "category-" + category);
-                Css.setClass(row, "category-" + NetUtils.getFileCategory(file));
+                    row.classList.remove("category-" + category);
+                var categories = NetUtils.getFileCategories(file);
+                categories.forEach((category) => row.classList.add("category-" + category));
             }
 
             var remoteIPLabel = row.querySelector(".netRemoteAddressCol .netAddressLabel");
@@ -1254,15 +1255,16 @@ NetPanel.prototype = Obj.extend(ActivablePanel,
         var fileCount = 0;
         var minTime = 0, maxTime = 0;
 
-        for (var i=0; i<phase.files.length; i++)
+        for (var i = 0; i < phase.files.length; i++)
         {
             var file = phase.files[i];
 
             // Do not count BFCache responses if the user says so.
-            if (!Firebug.netShowBFCacheResponses && file.fromBFCache)
+            if (!Options.get("netShowBFCacheResponses") && file.fromBFCache)
                 continue;
 
-            if (!categories || categories.indexOf(file.category) != -1)
+            if (!categories || (file.categories && file.categories.some((category) =>
+                categories.indexOf(category) !== -1)))
             {
                 if (file.loaded)
                 {
@@ -1444,12 +1446,19 @@ NetPanel.prototype = Obj.extend(ActivablePanel,
         this.filterCategories = filterCategories;
 
         var panelNode = this.panelNode;
+        var filtering = filterCategories.join(" ") !== "all";
+
+        if (filtering)
+            panelNode.classList.add("filtering");
+        else
+            panelNode.classList.remove("filtering");
+
         for (var category in NetUtils.fileCategories)
         {
-            if (filterCategories.join(" ") != "all" && filterCategories.indexOf(category) == -1)
-                Css.setClass(panelNode, "hideCategory-" + category);
+            if (filtering && filterCategories.indexOf(category) !== -1)
+                panelNode.classList.add("showCategory-" + category);
             else
-                Css.removeClass(panelNode, "hideCategory-" + category);
+                panelNode.classList.remove("showCategory-" + category);
         }
     },
 

@@ -1,23 +1,5 @@
 /* See license.txt for terms of usage */
 
-/* overrides to revert personas. see http://code.google.com/p/fbug/issues/detail?id=2704 */
-#fbContentBox:-moz-lwtheme .tabs-alltabs-button,
-#fbContentBox:-moz-lwtheme .scrollbutton-up,
-#fbContentBox:-moz-lwtheme .scrollbutton-down {
-    background: url("chrome://firebug/skin/tabbar/tab-bkgnd.png") repeat-x;
-    -moz-border-top-colors: ThreeDShadow rgba(255, 255, 255, 0.3);
-    -moz-border-left-colors: ThreeDShadow rgba(255, 255, 255, 0.3);
-    -moz-border-right-colors: ThreeDShadow;
-    background-color: rgba(255, 255, 255, 0.5);
-}
-
-#fbContentBox:-moz-lwtheme .tabs-alltabs-button:hover,
-#fbContentBox:-moz-lwtheme .scrollbutton-up:hover,
-#fbContentBox:-moz-lwtheme .scrollbutton-down:hover
-{
-    background-image: url("chrome://firebug/skin/tabbar/tab-hover-bkgnd.png");
-}
-/* end overrides */
 #fbFirebugMenu > .toolbarbutton-text,
 #fbFirebugMenu > .toolbarbutton-menu-dropmarker {
     display: none;
@@ -38,18 +20,8 @@ toolbarbutton[type="menu"] > .toolbarbutton-icon:not([src]) {
     padding: 4px 5px 2px 7px;
 }
 
-/************************************************************************************************/
-
-.toolbarbutton-iconic {
-    -moz-appearance: none;
-    padding: 0 !important;
-    border: none !important;
-    background: transparent !important;
-}
-
-.toolbarbutton-iconic > .toolbarbutton-icon {
-    padding: 0;
-}
+/*************************************************************************************************/
+/* Buttons */
 
 #fbSearchButtons {
     margin-bottom: 2px;
@@ -75,16 +47,11 @@ toolbarbutton[type="menu"] > .toolbarbutton-icon:not([src]) {
     list-style-image: url(chrome://firebug/skin/win/up.svg);
 }
 
-#fbToggleCommandEditor {
-    list-style-image: url(chrome://firebug/skin/win/down.svg);
-}
-
 :-moz-any(#fbMinimizeButton,
           #fbDetachButton,
           #fbCloseButton,
           #fbCommandLineHistoryButton,
-          #fbToggleCommandLine,
-          #fbToggleCommandEditor):hover {
+          #fbToggleCommandLine):hover {
     filter: url(resource://firebugui/filters.svg#darken);
 }
 
@@ -92,8 +59,7 @@ toolbarbutton[type="menu"] > .toolbarbutton-icon:not([src]) {
           #fbDetachButton,
           #fbCloseButton,
           #fbCommandLineHistoryButton,
-          #fbToggleCommandLine,
-          #fbToggleCommandEditor):active,
+          #fbToggleCommandLine):active,
 #fbCommandLineHistoryButton[checked="true"] {
     filter: url(resource://firebugui/filters.svg#deepDarken);
 }
@@ -102,7 +68,8 @@ toolbarbutton[type="menu"] > .toolbarbutton-icon:not([src]) {
     filter: url(resource://firebugui/filters.svg#grayscale);
 }
 
-/************************************************************************************************/
+/*************************************************************************************************/
+/* Command Editor */
 
 #fbCommandEditor {
     -moz-appearance: none;
@@ -124,17 +91,28 @@ toolbarbutton[type="menu"] > .toolbarbutton-icon:not([src]) {
     background-image: linear-gradient(rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.2));
 }
 
+/*************************************************************************************************/
+/* Window buttons */
+
 /* Set proper height of window buttons (close, min, detach) */
 #fbWindowButtons.innerToolbar {
-    margin-right: 4px;
     padding: 4px 0 6px 0;
+}
+
+#fbWindowButtons.innerToolbar:-moz-locale-dir(ltr) {
+    margin-right: 4px;
+}
+
+#fbWindowButtons.innerToolbar:-moz-locale-dir(rtl) {
+    margin-left: 4px;
 }
 
 #fbWindowButtons > toolbarbutton {
     margin: 0;
 }
 
-/************************************************************************************************/
+/*************************************************************************************************/
+/* Panel toolbar */
 
 #fbPanelBar1-tabBoxBackground,
 #fbPanelBar2-tabBoxBackground {
@@ -151,7 +129,8 @@ toolbarbutton[type="menu"] > .toolbarbutton-icon:not([src]) {
     background-image: linear-gradient(rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.2));
 }
 
-/************************************************************************************************/
+/*************************************************************************************************/
+/* Panel tabs */
 
 .panelTabs {
     -moz-box-align: end;
@@ -245,16 +224,15 @@ panelTab[selected="true"] > panelTabMenu {
     text-decoration: none;
 }
 
-/************************************************************************************************/
+/*************************************************************************************************/
+/* Ancestor path */ 
 
 #fbPanelStatus {
-    margin: 0 5px 0 0;
+    margin-top: 0;
+    -moz-margin-end: 5px;
+    margin-bottom: 0
+    -moz-margin-start: 0;
     overflow: hidden;
-}
-
-.panelStatusSeparator {
-    margin: 0;
-    color: graytext;
 }
 
 /************************************************************************************************/
@@ -265,8 +243,7 @@ panelTab[selected="true"] > panelTabMenu {
     font-weight: bold;
 }
 
-
-/************************************************************************************************/
+/*************************************************************************************************/
 /* Scrollable TabBar + TabList */
 
 panelBarArrowscrollbox > .scrollbutton-up,
@@ -289,9 +266,8 @@ panelBarArrowscrollbox > .scrollbutton-down {
 }
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-
-
 /* Tab scrollbox arrow and all-tabs buttons */
+
 panelBarArrowscrollbox > .scrollbutton-up,
 panelBarArrowscrollbox > .scrollbutton-down {
     -moz-appearance: none;
@@ -299,10 +275,6 @@ panelBarArrowscrollbox > .scrollbutton-down {
     margin: 3px 0px 4px;
     padding: 0px;
     border: 1px solid rgb(170,188,207);
-    /*-moz-border-top-colors: ThreeDShadow rgba(255, 255, 255, 0.3);
-    -moz-border-right-colors: ThreeDShadow;
-    -moz-border-left-colors: ThreeDShadow rgba(255, 255, 255, 0.3);
-    background: url("chrome://firebug/skin/tabbar/tab-bkgnd.png") repeat-x;*/
     border-bottom: none;
     border-top: none;
 }
@@ -311,10 +283,6 @@ panelBarArrowscrollbox > .scrollbutton-up:not([disabled="true"]):hover,
 panelBarArrowscrollbox > .scrollbutton-down:not([disabled="true"]):hover {
     border-top-width: 1px;
     padding-top: 1px;
-    /*-moz-border-top-colors: ThreeDShadow;
-    -moz-border-right-colors: ThreeDShadow;
-    -moz-border-left-colors: ThreeDShadow transparent;
-    background-image: url("chrome://firebug/skin/tabbar/tab-hover-bkgnd.png");*/
 }
 
 panelBarArrowscrollbox > .scrollbutton-up[disabled="true"],

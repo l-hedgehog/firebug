@@ -162,11 +162,11 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
         if (rules.length || sections.length)
         {
             // This removes overridden properties.
-            if (Firebug.onlyShowAppliedStyles)
+            if (Options.get("onlyShowAppliedStyles"))
                 this.removeOverriddenProps(rules, sections);
 
             // This removes user agent rules
-            if (!Firebug.showUserAgentCSS)
+            if (!Options.get("showUserAgentCSS"))
                 this.removeSystemRules(rules, sections);
         }
 
@@ -618,6 +618,7 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
                 "-",
                 {
                     label: "style.option.label.hover",
+                    id: "toggleHoverState",
                     type: "checkbox",
                     checked: self.hasPseudoClassLock(":hover"),
                     tooltiptext: "style.option.tip.hover",
@@ -628,6 +629,7 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
                 },
                 {
                     label: "style.option.label.active",
+                    id: "toggleActiveState",
                     type: "checkbox",
                     checked: self.hasPseudoClassLock(":active"),
                     tooltiptext: "style.option.tip.active",
@@ -638,6 +640,7 @@ CSSStylePanel.prototype = Obj.extend(CSSStyleSheetPanel.prototype,
                 },
                 {
                     label: "style.option.label.focus",
+                    id: "toggleFocusState",
                     type: "checkbox",
                     checked: self.hasPseudoClassLock(":focus"),
                     tooltiptext: "style.option.tip.focus",

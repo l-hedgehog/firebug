@@ -223,7 +223,15 @@ CookieReps.CookieRow = domplate(CookieReps.Rep,
         {
             // Format the expires date using the current locale.
             var date = new Date(cookie.cookie.expires * 1000);
-            return date.toLocaleString();
+            var dateFormat = {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit"
+            };
+            return Intl.DateTimeFormat(undefined, dateFormat).format(date);
         }
         catch (err)
         {
@@ -1059,7 +1067,7 @@ CookieReps.CookieTable = domplate(CookieReps.Rep,
                     TD({id: "colDomain", role: "columnheader",
                         "class": "cookieHeaderCell alphaValue a11yFocus"},
                         DIV({"class": "cookieHeaderCellBox",
-                            title: Locale.$STR("cookies.header.domain.tooltip")},
+                            title: Locale.$STR("cookies.header.domain.tooltip2")},
                         Locale.$STR("cookies.header.domain"))
                     ),
                     TD({id: "colRawSize", role: "columnheader",

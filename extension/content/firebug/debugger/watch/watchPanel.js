@@ -16,6 +16,7 @@ define([
     "firebug/lib/string",
     "firebug/lib/wrapper",
     "firebug/debugger/stack/stackFrame",
+    "firebug/debugger/watch/returnValueModifier",
     "firebug/debugger/watch/watchEditor",
     "firebug/debugger/watch/watchTree",
     "firebug/debugger/watch/watchProvider",
@@ -25,8 +26,8 @@ define([
     "firebug/console/commandLine",
 ],
 function(Firebug, FBTrace, Obj, Domplate, Firefox, ToggleBranch, Events, Dom, Css, Arr, Menu,
-    Locale, Str, Wrapper, StackFrame, WatchEditor, WatchTree, WatchProvider, WatchExpression,
-    DOMBasePanel, ErrorCopy, CommandLine) {
+    Locale, Str, Wrapper, StackFrame, ReturnValueModifier, WatchEditor, WatchTree, WatchProvider,
+    WatchExpression, DOMBasePanel, ErrorCopy, CommandLine) {
 
 "use strict";
 
@@ -179,6 +180,15 @@ WatchPanel.prototype = Obj.extend(BasePanel,
             this.showEmptyMembers();
     },
 
+    hide: function()
+    {
+        BasePanel.hide.apply(this, arguments);
+
+        Trace.sysout("watchPanel.hide;");
+
+        this.defaultTree.saveState(this.defaultToggles);
+    },
+
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
     // Content
 
@@ -266,8 +276,11 @@ WatchPanel.prototype = Obj.extend(BasePanel,
         var frameResultNode = this.panelNode.querySelector(".frameResultValueRow");
         if (frameResultNode)
         {
-            var frameResultObject = Firebug.getRepObject(frameResultNode);
-            var frameResultValue = frameResultObject.value;
+            // We can't use Firebug.getRepObject to find the |member| object since
+            // tree rows are using repIgnore flag.
+            var row = Dom.getAncestorByClass(frameResultNode, "memberRow");
+            var frameResultValue = row.repObject.value;
+
             // Put the flag on the ClientObject (which is cached) representing the return value.
             // Issue 7025: doUpdateSelection is called twice, first from watchPanel.onStartDebugging
             // and second from watchPanel.framesadded. Each time, the watch panel is rebuilt.
@@ -297,15 +310,36 @@ WatchPanel.prototype = Obj.extend(BasePanel,
         // Evaluate watch expressions.
         this.evalWatchesLocally();
 
+        // Either use the remembered state (from previous page session)
+        // or save the current state (e.g. when the user does refresh.
+        if (this.defaultToggles.isEmpty())
+            this.defaultTree.saveState(this.defaultToggles);
+
         // Render the watch panel tree.
         this.defaultTree.replace(this.panelNode, input);
 
-        // Auto expand the global scope item.
         if (this.defaultToggles.isEmpty())
         {
             var scope = this.context.getCurrentGlobal();
             var unwrappedScope = Wrapper.getContentView(scope);
-            this.defaultTree.expandObject(unwrappedScope);
+
+            // Auto expand the global scope item after a timeout.
+
+            // xxxHonza: iterating DOM window properties that happens in
+            // {@link DOMMemberProvider} can cause reflow and break {@link TabContext}
+            // initialization after Firefox tab is reopened using "Undo Close Tab" action.
+            // See also: http://code.google.com/p/fbug/issues/detail?id=7340#c3
+            // This might eventually go away as soon as issue 6943 is implemented
+            // and the Watch panel updated asynchronously.
+            //
+            // It helps if the iteration is done after a timeout, but it's a hack
+            // and the real problem is rather in {@link TabWatcher}.
+            // This might happen for any UI widget that uses {@link DOMMemberProvider}
+            // See also issue 7364
+            this.context.setTimeout(() =>
+            {
+                this.defaultTree.expandObject(unwrappedScope);
+            });
         }
         else
         {
@@ -684,7 +718,7 @@ WatchPanel.prototype = Obj.extend(BasePanel,
             return;
 
         var row = Dom.getAncestorByClass(target, "memberRow");
-        if (!row) 
+        if (!row)
             return;
 
         var path = this.getPropertyPath(row);
@@ -695,7 +729,7 @@ WatchPanel.prototype = Obj.extend(BasePanel,
         if (panel.name == "watches" && path.length == 1)
             return;
 
-        items.push({
+        items.push("-", {
            id: "fbAddWatch",
            label: "AddWatch",
            tooltiptext: "watch.tip.Add_Watch",
@@ -710,15 +744,37 @@ WatchPanel.prototype = Obj.extend(BasePanel,
         if (!this.watches || this.watches.length == 0)
             return items;
 
-        // find the index of "DeleteWatch" in the items: 
-        var deleteWatchIndex = items.map(function(item)
+        var itemIDs = items.map((item) => item.id);
+        var isWatch = Dom.getAncestorByClass(target, "watchRow");
+
+        // find the index of "EditDOMProperty" in the items:
+        var editWatchIndex = itemIDs.indexOf("EditDOMProperty");
+
+        // find the index of "DeleteWatch" in the items:
+        var deleteWatchIndex = itemIDs.indexOf("DeleteProperty");
+
+        if (isWatch)
         {
-            return item.id;
-        }).indexOf("DeleteProperty");
+            if (editWatchIndex !== -1)
+            {
+                items[editWatchIndex].label = "EditWatch";
+                items[editWatchIndex].tooltiptext = "watch.tip.Edit_Watch";
+            }
+
+            if (deleteWatchIndex !== -1)
+            {
+                items[deleteWatchIndex].label = "DeleteWatch";
+                items[deleteWatchIndex].tooltiptext = "watch.tip.Delete_Watch";
+            }
+        }
 
         // if DeleteWatch was found, we insert DeleteAllWatches after it
         // otherwise, we insert the item at the beginning of the menu
-        var deleteAllWatchesIndex = (deleteWatchIndex >= 0) ? deleteWatchIndex + 1 : 0;
+        var deleteAllWatchesIndex = 0;
+        if (deleteWatchIndex !== -1)
+            deleteAllWatchesIndex = deleteWatchIndex + 1;
+        else if (editWatchIndex !== -1)
+            deleteAllWatchesIndex = editWatchIndex + 1;
 
         Trace.sysout("insert DeleteAllWatches at: " + deleteAllWatchesIndex);
 
@@ -729,6 +785,11 @@ WatchPanel.prototype = Obj.extend(BasePanel,
             tooltiptext: "watch.tip.Delete_All_Watches",
             command: Obj.bindFixed(this.deleteAllWatches, this)
         });
+
+        // Add a separator before the 'Delete All Watches' option in case a
+        // DOM property was clicked
+        if (!isWatch)
+            items.splice(deleteAllWatchesIndex, 0, "-");
 
         return items;
     },
@@ -742,23 +803,8 @@ WatchPanel.prototype = Obj.extend(BasePanel,
     {
         Trace.sysout("watchPanel.getPopupObject; target:", target);
 
-        // Right clicking on watch panel label doesn't produce "Inspect in..." options.
-        // (returning undefined from this method avoids these options).
-        var memberLabel = Dom.getAncestorByClass(target, "memberLabelCell");
-        if (memberLabel)
-            return;
-
-        // Right clicking on a template with associated object (repObject)
-        // allows to inspect the object. This is the default behavior.
-        var repObject = BasePanel.getPopupObject.apply(this, arguments);
-        if (repObject)
-            return this.getObjectView(repObject);
-
-        // Some members displayed in the panel can be for client objects e.g. the scope
-        // list (i.e. JSD2 environments sent over RDP).
-        var row = Dom.getAncestorByClass(target, "memberRow");
-        if (row)
-            return this.getRealRowObject(row);
+        var object = BasePanel.getPopupObject.apply(this, arguments);
+        return object ? this.getObjectView(object) : object;
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -803,12 +849,17 @@ WatchPanel.prototype = Obj.extend(BasePanel,
         }
         else if (Css.hasClass(row, "watchRow"))
         {
-            Firebug.Editor.startEditing(row, this.tree.getRowName(row));
+            Firebug.Editor.startEditing(row, member.value.expr);
             return;
         }
 
         // Use basic editing logic implemented in {@link DomBasePanel}.
         BasePanel.editProperty.apply(this, arguments);
+    },
+
+    deleteProperty: function(row)
+    {
+        this.deleteWatch(row);
     },
 
     getEditor: function(target, value)
@@ -825,10 +876,49 @@ WatchPanel.prototype = Obj.extend(BasePanel,
         // So, make sure to persist the proper tree state.
         if (this.selection instanceof StackFrame)
             this.tree.saveState(this.toggles);
-        else
-            this.defaultTree.saveState(this.defaultToggles);
 
-        BasePanel.setPropertyValue.apply(this, arguments);
+        var member = row.domObject;
+
+        // If the user changes the frame result value, store the value
+        // in ReturnValueModifier. Otherwise, just redirect to the super class.
+        if (member && (member.value instanceof WatchProvider.FrameResultObject))
+            this.setPropertyReturnValue(value);
+        else
+            BasePanel.setPropertyValue.apply(this, arguments);
+    },
+
+    /**
+     * Evaluate the expression and store its result in ReturnValueModifier.
+     * ReturnValueModifier will store it (weakly referenced), and return it on frame completion.
+     *
+     * @param {string} value The expression entered by the user whose result is the value to store.
+     *
+     */
+    setPropertyReturnValue: function(value)
+    {
+        var onSuccess = (result, context) =>
+        {
+            Trace.sysout("watchPanel.setPropertyReturnValue; evaluate success", result);
+            ReturnValueModifier.setUserReturnValue(context, result);
+        };
+
+        var onFailure = (exc, context) =>
+        {
+            Trace.sysout("watchPanel.setPropertyReturnValue; evaluation FAILED " + exc, exc);
+            try
+            {
+                // See DomBasePanel.setPropertyValue for the explanation.
+                ReturnValueModifier.setUserReturnValue(context, value);
+            }
+            catch (exc)
+            {
+            }
+        };
+
+        var options = {noStateChange: true};
+        CommandLine.evaluate(value, this.context, null, null, onSuccess, onFailure, options);
+
+        this.refresh();
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -844,6 +934,15 @@ WatchPanel.prototype = Obj.extend(BasePanel,
 
         // Unwrapping
         return this.getObjectView(object);
+    },
+
+    getRowPropertyValue: function(row)
+    {
+        var member = row.domObject;
+        if (member && (member.value instanceof WatchProvider.FrameResultObject))
+            return this.provider.getValue(member.value);
+
+        return BasePanel.getRowPropertyValue.apply(this, arguments);
     },
 });
 

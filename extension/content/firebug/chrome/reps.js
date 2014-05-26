@@ -237,9 +237,19 @@ FirebugReps.Func = domplate(Rep,
         {
             // XXX use Debugger.Object.displayName here?
             var name = regularFn[1] || fn.displayName || "function";
-            if ((name == "anonymous") && fn.displayName)
+            if (name == "anonymous" && fn.displayName)
                 name = fn.displayName;
-            var args = regularFn[2];
+
+            // What we get from safeToString(fn) is actual source code of fn,
+            // which can include e.g. unnecessary whitespace and comments around
+            // the arguments. For now we don't have a great solution for
+            // dealing with comments, but we can at least normalize whitespace
+            // into the format |f(a, b, c)| (see issue 7386).
+            var args = regularFn[2]
+                .replace(/([,\(])\s+/g, "$1")
+                .replace(/\s+([,\)])/g, "$1")
+                .replace(/,/g, ", ");
+
             result = name + args;
         }
         else
@@ -260,12 +270,13 @@ FirebugReps.Func = domplate(Rep,
             System.copyToClipboard(fn.toSource());
     },
 
-    monitor: function(context, script, monitored)
+    monitor: function(context, script, monitored, mode)
     {
+        mode = mode || "monitor";
         if (monitored)
-            FunctionMonitor.unmonitorScript(context, script, "monitor");
+            FunctionMonitor.unmonitorScript(context, script, mode);
         else
-            FunctionMonitor.monitorScript(context, script, "monitor");
+            FunctionMonitor.monitorScript(context, script, mode);
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -327,7 +338,8 @@ FirebugReps.Func = domplate(Rep,
 
     getScriptContextMenuItems: function(context, script, name)
     {
-        var monitored = FunctionMonitor.isScriptMonitored(context, script);
+        var monitored = FunctionMonitor.isScriptMonitored(context, script, "monitor");
+        var hasBreakpoint = FunctionMonitor.isScriptMonitored(context, script, "debug");
 
         var self = this;
         return [{
@@ -339,7 +351,18 @@ FirebugReps.Func = domplate(Rep,
             command: function()
             {
                 var checked = this.hasAttribute("checked");
-                self.monitor(context, script, !checked);
+                self.monitor(context, script, !checked, "monitor");
+            }
+        }, {
+            label: Locale.$STR("SetBreakpoint"),
+            tooltiptext: Locale.$STRF("dom.tip.setBreakpoint", [name]),
+            nol10n: true,
+            type: "checkbox",
+            checked: hasBreakpoint,
+            command: function()
+            {
+                var checked = this.hasAttribute("checked");
+                self.monitor(context, script, !checked, "debug");
             }
         }];
     },
@@ -755,12 +778,16 @@ FirebugReps.Arr = domplate(FirebugReps.ArrBase,
         OBJECTBOX({_repObject: "$object",
             $hasTwisty: "$object|hasSpecialProperties",
             onclick: "$onToggleProperties"},
-            SPAN({"class": "arrayLeftBracket", role: "presentation"}, "["),
+            A({"class": "objectLink", onclick: "$onClickBracket"},
+                SPAN({"class": "arrayLeftBracket", role: "presentation"}, "[")
+            ),
             FOR("item", "$object|shortArrayIterator",
                 TAG("$item.tag", {object: "$item.object"}),
                 SPAN({"class": "arrayComma", role: "presentation"}, "$item.delim")
             ),
-            SPAN({"class": "arrayRightBracket"}, "]"),
+            A({"class": "objectLink", onclick: "$onClickBracket"},
+                SPAN({"class": "arrayRightBracket", role: "presentation"}, "]")
+            ),
             SPAN({"class": "arrayProperties", role: "group"})
         ),
 
@@ -1002,7 +1029,7 @@ FirebugReps.Element = domplate(Rep,
 
     getAttrValue: function(attr)
     {
-        var limit = Firebug.displayedAttributeValueLimit;
+        var limit = Options.get("displayedAttributeValueLimit");
         return (limit > 0) ? Str.cropString(attr.value, limit) : attr.value;
     },
 
@@ -1042,6 +1069,19 @@ FirebugReps.Element = domplate(Rep,
             for (var i=0, len=elt.classList.length; i<len; ++i)
                 selectorClasses += "." + elt.classList[i];
             return selectorClasses;
+        }
+        catch (err)
+        {
+            return "";
+        }
+    },
+
+    // xxxHonza: Used by FireQuery 1.4.1
+    getSelectorClass: function(elt)
+    {
+        try
+        {
+            return elt.classList.length > 0 ? ("." + elt.classList[0]) : "";
         }
         catch (err)
         {
@@ -1109,14 +1149,14 @@ FirebugReps.Element = domplate(Rep,
     getNodeTextGroups: function(element)
     {
         var text =  element.textContent;
-        if (!Firebug.showFullTextNodes)
+        if (!Options.get("showFullTextNodes"))
         {
             text = Str.cropString(text,50);
         }
 
         var escapeGroups=[];
 
-        if (Firebug.showTextNodesWithWhitespace)
+        if (Options.get("showTextNodesWithWhitespace"))
             escapeGroups.push({
                 "group": "whitespace",
                 "class": "nodeWhiteSpace",
@@ -1127,7 +1167,7 @@ FirebugReps.Element = domplate(Rep,
                 }
             });
 
-        if (Firebug.entityDisplay != "symbols")
+        if (Options.get("entityDisplay") !== "symbols")
             escapeGroups.push({
                 "group": "text",
                 "class": "nodeTextEntity",
@@ -1763,7 +1803,7 @@ FirebugReps.CSSRule = domplate(Rep,
         if (rule instanceof CSSFontFaceRule)
             return Css.extractURLs(rule.style.getPropertyValue("src")).join(", ");
         else if (rule instanceof window.CSSImportRule)
-            return rule.href;
+            return rule.styleSheet.href;
 
         return "";
     }
@@ -1784,7 +1824,8 @@ FirebugReps.Window = domplate(Rep,
     {
         try
         {
-            return (win && win.location && !win.closed) ? Url.getFileName(win.location.href) : "";
+            return (win && win.location && !win.closed) ?
+                Str.cropString(Url.getFileName(win.location.href)) : "";
         }
         catch (exc)
         {
@@ -1849,9 +1890,6 @@ FirebugReps.Event = domplate(Rep,
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
     tag:
-        TAG("$copyEventTag", {object: "$object|copyEvent"}),
-
-    copyEventTag:
         OBJECTLINK("$object|summarizeEvent"),
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -1871,16 +1909,11 @@ FirebugReps.Event = domplate(Rep,
         return info.join("");
     },
 
-    copyEvent: function(event)
-    {
-        return new Dom.EventCopy(event);
-    },
-
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
     supportsObject: function(object, type)
     {
-        return object instanceof window.Event || object instanceof Dom.EventCopy;
+        return object instanceof window.Event;
     },
 
     getTitle: function(event, context)
@@ -1943,7 +1976,7 @@ FirebugReps.SourceLink = domplate(Rep,
                     sourceLink.href + "\': " + exc, exc);
         }
 
-        var maxWidth = Firebug.sourceLinkLabelWidth;
+        var maxWidth = Options.get("sourceLinkLabelWidth");
         if (maxWidth > 0)
             fileName = Str.cropString(fileName, maxWidth);
 
@@ -2365,15 +2398,20 @@ FirebugReps.Description = domplate(Rep,
     tag:
         SPAN({"class": "descriptionBox", onclick: "$onClickLink"}),
 
-    render: function(text, parentNode, listener)
+    render: function(text, parentNode, listeners)
     {
         var params = {};
         params.onClickLink = function(event)
         {
             // Only clicks on links are passed to the original listener.
             var localName = event.target.localName;
-            if (listener && localName && localName.toLowerCase() == "a")
-                listener(event);
+            if (listeners && localName && localName.toLowerCase() == "a")
+            {
+                if (Array.isArray(listeners))
+                    listeners[Dom.getChildIndex(event.target)](event);
+                else
+                    listeners(event);
+            }
         };
 
         var rootNode = this.tag.replace(params, parentNode, this);

@@ -139,6 +139,7 @@ function initPropertyData()
             values = values.concat(extraColors);
 
         // Gradients, see bug 973345
+        // xxxsz: Can be removed when Firefox 31 is the minimum supported version
         if (values.indexOf("-moz-element()") !== -1)
             values = values.concat(extraImages);
 
@@ -335,7 +336,7 @@ Css.isColorKeyword = function(keyword)
         return false;
 
     if (!colorKeywordSet)
-        colorKeywordSet = new Set(getColorValues());
+        colorKeywordSet = new Set(getColorValues().map((color) => color.toLowerCase()));
 
     return colorKeywordSet.has(keyword.toLowerCase());
 };
@@ -454,16 +455,22 @@ Css.getElementCSSPath = function(element)
 // ********************************************************************************************* //
 // CSS classes
 
-var classNameReCache={};
+var classNameReCache = {};
 
 Css.hasClass = function(node, name)
 {
-    if (!node || node.nodeType != Node.ELEMENT_NODE || !node.className || !name)
+    if (!node || node.nodeType != Node.ELEMENT_NODE || !node.className ||
+        typeof(node.className) != "string" || !name)
+    {
         return false;
+    }
 
     if (name.indexOf(" ") != -1)
     {
-        var classes = name.split(" "), len = classes.length, found=false;
+        var classes = name.split(" ");
+        var len = classes.length;
+        var found = false;
+
         for (var i = 0; i < len; i++)
         {
             var cls = classes[i].trim();
@@ -474,14 +481,23 @@ Css.hasClass = function(node, name)
                 found = true;
             }
         }
+
         return found;
     }
 
     var re;
     if (name.indexOf("-") == -1)
-        re = classNameReCache[name] = classNameReCache[name] || new RegExp('(^|\\s)' + name + '(\\s|$)', "g");
-    else // XXXsroussey don't cache these, they are often setting values. Should be using setUserData/getUserData???
+    {
+        re = classNameReCache[name] = classNameReCache[name] ||
+            new RegExp('(^|\\s)' + name + '(\\s|$)', "g");
+    }
+    else
+    {
+        // XXXsroussey don't cache these, they are often setting values.
+        // Should be using setUserData/getUserData???
         re = new RegExp('(^|\\s)' + name + '(\\s|$)', "g");
+    }
+
     return node.className.search(re) != -1;
 };
 
@@ -956,7 +972,7 @@ Css.rgbToHex = function(value)
     function convertRGBToHex(r, g, b)
     {
         return "#" + ((1 << 24) + (r << 16) + (g << 8) + (b << 0)).
-            toString(16).substr(-6).toUpperCase();
+            toString(16).substr(-6);
     }
 
     value = Css.colorNameToRGB(value);

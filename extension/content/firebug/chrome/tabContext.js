@@ -8,6 +8,7 @@ define([
     "firebug/lib/events",
     "firebug/lib/url",
     "firebug/lib/css",
+    "firebug/lib/options",
     "firebug/lib/wrapper",
     "firebug/lib/promise",
     "arch/compilationunit",
@@ -15,7 +16,7 @@ define([
     "firebug/chrome/plugin",
     "firebug/debugger/debuggerLib",
 ],
-function(Firebug, FBTrace, Obj, Arr, Events, Url, Css, Wrapper, Promise,
+function(Firebug, FBTrace, Obj, Arr, Events, Url, Css, Options, Wrapper, Promise,
     CompilationUnit, Win, Plugin, DebuggerLib) {
 
 "use strict";
@@ -62,7 +63,7 @@ function TabContext(win, browser, chrome, persistedState)
 
     // xxxHonza: remove?
     // Used by chromebug.
-    this.global = win; 
+    this.global = win;
 
     // Initialize context.baseWindow here (modified then by the cd() command).
     this.baseWindow = win;
@@ -279,6 +280,22 @@ TabContext.prototype =
 
     destroy: function(state)
     {
+        state.panelState = {};
+
+        // Inherit panelStates that have not been restored yet
+        if (this.persistedState)
+        {
+            for (var panelName in this.persistedState.panelState)
+                state.panelState[panelName] = this.persistedState.panelState[panelName];
+        }
+
+        // Destroy all panels in this context.
+        for (var panelName in this.panelMap)
+        {
+            var panelType = Firebug.getPanelType(panelName);
+            this.destroyPanel(panelType, state);
+        }
+
         // All existing timeouts need to be cleared. This is why it's recommended
         // to always create timeouts through the context object. It ensures that
         // all timeouts and intervals are cleared when the context is destroyed.
@@ -324,22 +341,6 @@ TabContext.prototype =
         // "TypeError: can't access dead object"
         // We should avoid these exceptions (even if they are not representing memory leaks)
         this.unregisterAllListeners();
-
-        state.panelState = {};
-
-        // Inherit panelStates that have not been restored yet
-        if (this.persistedState)
-        {
-            for (var panelName in this.persistedState.panelState)
-                state.panelState[panelName] = this.persistedState.panelState[panelName];
-        }
-
-        // Destroy all panels in this context.
-        for (var panelName in this.panelMap)
-        {
-            var panelType = Firebug.getPanelType(panelName);
-            this.destroyPanel(panelType, state);
-        }
 
         Trace.sysout("tabContext.destroy; " + this.getName() + " set state ", state);
     },
@@ -687,7 +688,7 @@ TabContext.prototype =
 
         if (!forceDelay)
         {
-            if (!Firebug.throttleMessages)
+            if (!Options.get("throttleMessages"))
             {
                 message.apply(object, args);
                 return false;

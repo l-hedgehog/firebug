@@ -37,6 +37,11 @@ var ClosureInspector =
         try
         {
             var ret = scope.getVariable(name);
+            if (ret && (ret.optimizedOut || ret.missingArguments))
+                return OptimizedAway;
+
+            // Try to detect optimized-away values. This round-about method is
+            // needed for Firefox versions prior to 31 (when bug 716647 landed).
             if (ret !== undefined)
                 return ret;
 
@@ -56,6 +61,8 @@ var ClosureInspector =
         catch (exc)
         {
             // E.g. optimized-away "arguments" can throw "Debugger scope is not live".
+            // This catch clause shouldn't be necessary in Firefox 31 or later (see
+            // https://bugzil.la/1007164).
             Trace.sysout("ClosureInspector; getVariableOrOptimizedAway caught " +
                 "an exception (name = " + name + ")", exc);
             return OptimizedAway;
