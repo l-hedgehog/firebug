@@ -154,6 +154,11 @@ System.isWin = function(win)
     return win.navigator.platform.search("Win") != -1;
 }
 
+System.isLinux = function(win)
+{
+    return win.navigator.platform.search("Linux") != -1;
+}
+
 // ********************************************************************************************* //
 // Firebug Version Comparator
 

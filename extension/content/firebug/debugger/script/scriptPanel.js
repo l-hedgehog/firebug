@@ -116,6 +116,22 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
         Firebug.registerUIListener(this);
     },
 
+    initializeNode : function()
+    {
+        this.onResizer = this.onResize.bind(this);
+        this.resizeEventTarget = Firebug.chrome.$("fbContentBox");
+        Events.addEventListener(this.panelNode, "resize", this.onResizer, true);
+
+        BasePanel.initializeNode.apply(this, arguments);
+    },
+
+    destroyNode : function()
+    {
+        Events.removeEventListener(this.panelNode, "resize", this.onResizer, true);
+
+        BasePanel.destroyNode.apply(this, arguments);
+    },
+
     destroy: function(state)
     {
         // We want the location (compilationUnit) to persist, not the selection (e.g. stackFrame).
@@ -198,6 +214,7 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
         this.showToolbarButtons("fbLocationSeparator", false);
         this.showToolbarButtons("fbLocationButtons", active);
         this.showToolbarButtons("fbDebuggerButtons", active);
+        this.showToolbarButtons("fbScriptsButtons", active);
         this.showToolbarButtons("fbScriptButtons", active);
         this.showToolbarButtons("fbStatusButtons", active);
         this.showToolbarButtons("fbLocationList", active);
@@ -238,6 +255,32 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
         // The page has been just loaded and there might be some new scripts after all.
         if (!this.location)
             this.navigate(null);
+    },
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+    // Editor Size Update
+
+    onResize: function()
+    {
+        var editor = this.panelNode.querySelector(".CodeMirror");
+        if (!editor)
+            return;
+
+        var box = this.panelNode.querySelector(".notificationBox");
+        if (!box)
+            editor.style.height = "";
+        else
+            editor.style.height = (this.panelNode.clientHeight - box.clientHeight) + "px";
+    },
+
+    onNotificationShow: function()
+    {
+        this.onResize();
+    },
+
+    onNotificationHide: function()
+    {
+        this.onResize();
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -666,6 +709,8 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
             // 3) Get the type/category from the content type.
             var sourceFile = SourceFile.getSourceFileByUrl(this.context, sourceLink.href);
             var category = sourceFile.getCategory();
+
+            this.setPrettyPrintState();
 
             // Display the source.
             this.scriptView.showSource(lines.join(""), category);
@@ -1309,7 +1354,7 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
         items.push({
             label: "EditBreakpointCondition",
             tooltiptext: "breakpoints.tip.Edit_Breakpoint_Condition",
-            command: Obj.bindFixed(this.editBreakpointCondition, this, lineNo)
+            command: Obj.bindFixed(this.initializeEditBreakpointCondition, this, lineNo)
         });
 
         if (this.context.stopped)
@@ -1354,34 +1399,15 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
                     id: "contextMenuStepOut",
                     command: Obj.bindFixed(debuggr.stepOut, debuggr, this.context),
                     acceltext: "Shift+F11"
-                },
+                }/*,
                 {
                     label: "firebug.RunUntil",
                     tooltiptext: "script.tip.Run_Until",
                     id: "contextMenuRunUntil",
                     command: Obj.bindFixed(debuggr.runUntil, debuggr, this.context,
                         compilationUnit, lineNo)
-                }
+                }*/
             )
-        }
-
-        var sourceFile = this.getSourceFile();
-        var category = sourceFile.getCategory();
-
-        // Pretty printing can be done only for source files that have
-        // corresponding server side script actor. Note that dynamic scripts
-        // are currently collected on the client side (a workaround) since
-        // RDP doesn't support it yet.
-        if (category === "js" && sourceFile.actor)
-        {
-            items.push("-",
-            {
-                label: "script.PrettyPrint",
-                tooltiptext: "script.tip.PrettyPrint",
-                type: "checkbox",
-                checked: sourceFile.isPrettyPrinted,
-                command: Obj.bindFixed(this.togglePrettyPrint, this)
-            });
         }
 
         return items;
@@ -1406,16 +1432,17 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
         if (!info.rangeParent)
             return Firebug.getRepObject(target);
 
-        var rangeOffset = info.rangeOffset || 0;
-        var expr = getExpressionAt(info.rangeParent.data, rangeOffset);
-        if (!expr || !expr.expr)
+        var expr = this.getExpressionUnderCursor(info.x, info.y,
+            info.rangeParent, info.rangeOffset);
+
+        if (!expr)
             return Firebug.getRepObject(target);
 
         var evalResult;
         var success = (result, context) => { evalResult = result; }
         var failure = (result, context) => { }
 
-        CommandLine.evaluate(expr.expr, this.context, null,
+        CommandLine.evaluate(expr, this.context, null,
             this.context.getCurrentGlobal(),
             success, failure, {noStateChange: true});
 
@@ -1528,6 +1555,21 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
                 chrome.keyIgnore(this.keyListeners[i]);
             delete this.keyListeners;
         }
+    },
+
+    // Update the pretty-print button to reflect ability of the selection to be reformatted
+    setPrettyPrintState: function()
+    {
+        var sourceFile = this.getSourceFile();
+        var category = sourceFile.getCategory();
+
+        // Pretty printing can be done only for source files that have
+        // corresponding server side script actor. Note that dynamic scripts
+        // are currently collected on the client side (a workaround) since
+        // RDP doesn't support it yet.
+        var prettyPrintButton = Firebug.chrome.$("fbToggleScriptPrettyPrinting");
+        prettyPrintButton.disabled = (category !== "js" || !sourceFile.actor);
+        prettyPrintButton.checked = (!prettyPrintButton.disabled && sourceFile.isPrettyPrinted);
     },
 
     syncListeners: function(context)
@@ -1650,6 +1692,11 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
             this.syncCommands(this.context);
             this.syncListeners(this.context);
 
+            // Handling focus events causes Firebug UI to freeze (see issue 7480),
+            // so, release the focus from the browser window it'll be focused
+            // again on the line below.
+            Firebug.chrome.blur();
+
             // issue 3463 and 4213
             Firebug.chrome.syncPanel("script");
             Firebug.chrome.focus();
@@ -1660,7 +1707,7 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
             this.highlight(true);
 
             // Display break notification box.
-            BreakNotification.show(this.context, this.panelNode, packet.why.type);
+            BreakNotification.show(this.context, this.panelNode, packet.why.type, this);
         }
         catch (exc)
         {
@@ -1744,20 +1791,14 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
         if (!viewContent)
             return;
 
-        // See http://code.google.com/p/fbug/issues/detail?id=889
-        // Idea from: Jonathan Zarate's rikaichan extension (http://www.polarcloud.com/rikaichan/)
-        if (!rangeParent)
+        var text = this.getExpressionUnderCursor(x, y, rangeParent, rangeOffset);
+        if (!text)
             return false;
 
-        rangeOffset = rangeOffset || 0;
-        var expr = getExpressionAt(rangeParent.data, rangeOffset);
-        if (!expr || !expr.expr)
-            return false;
-
-        if (expr.expr == this.infoTipExpr)
+        if (text == this.infoTipExpr)
             return true;
         else
-            return this.populateInfoTip(infoTip, expr.expr);
+            return this.populateInfoTip(infoTip, text);
     },
 
     populateInfoTip: function(infoTip, expr)
@@ -1818,6 +1859,39 @@ ScriptPanel.prototype = Obj.extend(BasePanel,
         this.infoTipExpr = expr;
 
         return true;
+    },
+
+    // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+    getExpressionUnderCursor: function(x, y, rangeParent, rangeOffset)
+    {
+        // First try to get selected expression under the cursor.
+        var text = this.scriptView.getSelectedTextFrom(x, y);
+        if (!text)
+        {
+            // See http://code.google.com/p/fbug/issues/detail?id=889
+            // Idea from: Jonathan Zarate's rikaichan extension (http://www.polarcloud.com/rikaichan/)
+            if (!rangeParent)
+                return false;
+
+            rangeOffset = rangeOffset || 0;
+            var row = Dom.getAncestorByClass(rangeParent, "firebug-line");
+            var expr = null;
+            if (row)
+            {
+                var range = rangeParent.ownerDocument.createRange();
+                range.setStart(row, 0);
+                range.setEnd(rangeParent, rangeOffset);
+                expr = getExpressionAt(range.startContainer.textContent, range.toString().length);
+            }
+
+            if (!expr || !expr.expr)
+                return false;
+
+            text = expr.expr;
+        }
+
+        return text;
     },
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
